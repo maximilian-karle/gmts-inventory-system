@@ -1,0 +1,850 @@
+--- /mnt/project/report_builder.py	1980-01-01 00:00:00.000000000 +0000
++++ /home/claude/gmts_src/report_builder.py	2026-06-29 06:48:39.507869679 +0000
+@@ -28,6 +28,8 @@
+ 
+ from __future__ import annotations
+ 
++from dataclasses import dataclass, field
++
+ import pandas as pd
+ from openpyxl.styles import Font, PatternFill
+ from openpyxl.utils import get_column_letter
+@@ -306,6 +308,215 @@
+ ]
+ 
+ 
++# ---------------------------------------------------------------------------
++# Generischer Section-Mechanismus (Refactoring, 29.06.2026)
++# ---------------------------------------------------------------------------
++# Hintergrund: Mit jeder Phase (Reichweite, Wiederbeschaffung, Simulation,
++# kuenftig Fruehwarnsystem) kam in build_report()/build_consolidated_report()
++# ein weiterer optionaler Parameter sowie ein nahezu identischer Codeblock
++# hinzu (Spalten filtern -> Reiter schreiben -> Format-Listen ergaenzen ->
++# im konsolidierten Fall zusaetzlich 'Technologie'-Spalte einfuegen). Diese
++# Wiederholung wird hier durch EINE deklarative Beschreibung pro Reiter
++# (SheetSpec) plus zwei generische Funktionen ersetzt.
++#
++# Bewusst NICHT in diesen Mechanismus gepresst: TREND_SHEET_NAME und
++# TREND_DETAILS_SHEET_NAME (Entscheidung Claude, 29.06.2026, in Abstimmung
++# mit Max). Beide unterscheiden sich strukturell von den uebrigen Reitern
++# (dynamische Monatsspalten statt fester Spaltenliste, Z-Score-Paarspalten,
++# zellweises Outlier-Highlighting via Material x Spalte) - eine generische
++# Struktur, die auch diese Faelle abdeckt, wuerde Spezialfelder enthalten,
++# die nur diese zwei von sechs Reitern nutzen, und waere damit selbst
++# wieder ein kleiner Monolith. Die beiden Trend-Reiter bleiben daher als
++# eigene, klar markierte Funktionen bestehen (siehe _build_trend_sheet(),
++# _build_trend_details_sheet() weiter unten) - identisch zur bisherigen
++# Logik, nur aus build_report()/build_consolidated_report() ausgelagert.
++@dataclass(frozen=True)
++class SheetSpec:
++    """Deklarative Beschreibung eines 'einfachen' Reiters (statische
++    Spaltenliste, kein dynamisches Spaltenlayout, kein Cell-Highlighting).
++
++    Eine SheetSpec pro Phase/Reiter (Reichweite, Wiederbeschaffung,
++    Simulation, Fruehwarnsystem, ...) ersetzt den bisher je Reiter
++    wiederholten Codeblock in build_report()/build_consolidated_report().
++    """
++
++    sheet_name: str
++    columns: list[str]
++    decimal_columns: list[str] = field(default_factory=list)
++    currency_columns: list[str] = field(default_factory=list)
++    percent_columns: list[str] = field(default_factory=list)
++
++
++@dataclass
++class _FormatCollector:
++    """Sammelt waehrend des Schreibens aller Reiter die Spaltennamen, die am
++    Ende gemeinsam an _apply_formatting() uebergeben werden. Ersetzt die
++    bisher in build_report()/build_consolidated_report() von Hand mit '+'
++    zusammengefuehrten einzelnen Listen (currency_columns, decimal_columns,
++    percent_columns) durch EIN Objekt, das jede SheetSpec-Verarbeitung
++    direkt ergaenzen kann, ohne dass die Aufrufstelle jede neue Phase
++    erneut per Hand verdrahten muss.
++    """
++
++    currency_columns: list[str] = field(default_factory=list)
++    decimal_columns: list[str] = field(default_factory=list)
++    percent_columns: list[str] = field(default_factory=list)
++
++
++def _build_single_sheet(
++    spec: SheetSpec,
++    source_df: pd.DataFrame | None,
++    writer: pd.ExcelWriter,
++    fmt: _FormatCollector,
++) -> None:
++    """Schreibt EINEN Reiter fuer den Einzel-Report (build_report), sofern
++    source_df gesetzt ist, und registriert die zugehoerigen Format-Spalten
++    in fmt. Tut nichts, falls source_df None ist (Phase fuer diesen Lauf
++    nicht aktiv) - haelt build_report() abwaertskompatibel.
++    """
++    if source_df is None:
++        return
++
++    available_columns = [col for col in spec.columns if col in source_df.columns]
++    _write_sheet(source_df[available_columns], writer, spec.sheet_name)
++
++    fmt.decimal_columns += [col for col in spec.decimal_columns if col in available_columns]
++    fmt.currency_columns += [col for col in spec.currency_columns if col in available_columns]
++    fmt.percent_columns += [col for col in spec.percent_columns if col in available_columns]
++
++
++def _build_consolidated_sheet(
++    spec: SheetSpec,
++    per_technology_source_dfs: dict[str, pd.DataFrame] | None,
++    per_technology_dfs: dict[str, pd.DataFrame],
++    writer: pd.ExcelWriter,
++    fmt: _FormatCollector,
++) -> None:
++    """Schreibt EINEN konsolidierten Reiter (build_consolidated_report) ueber
++    alle Technologien hinweg, sofern per_technology_source_dfs gesetzt und
++    nicht leer ist. Ergaenzt je Technologie die Spalte 'Technologie' (siehe
++    bisherige Logik in build_consolidated_report) und registriert die
++    Format-Spalten in fmt - analog zu _build_single_sheet(), aber fuer den
++    Mehrfach-Technologie-Fall.
++    """
++    if not per_technology_source_dfs:
++        return
++
++    parts = []
++    for slug, source_df in per_technology_source_dfs.items():
++        part = source_df.copy()
++        part["Technologie"] = per_technology_dfs[slug]["Technologie"].iloc[0]
++        parts.append(part)
++
++    combined = pd.concat(parts, ignore_index=True, sort=False)
++    available_columns = ["Technologie"] + [
++        col for col in spec.columns if col in combined.columns
++    ]
++    _write_sheet(combined[available_columns], writer, spec.sheet_name)
++
++    fmt.decimal_columns += [col for col in spec.decimal_columns if col in available_columns]
++    fmt.currency_columns += [col for col in spec.currency_columns if col in available_columns]
++    fmt.percent_columns += [col for col in spec.percent_columns if col in available_columns]
++
++
++# SheetSpec-Instanzen je 'einfachem' Reiter (siehe Konstanten weiter oben im
++# Modul fuer die jeweiligen Spaltenlisten). Eine Stelle, an der die Reiter-
++# Reihenfolge UND die Format-Zuordnung gemeinsam ersichtlich sind - bisher
++# auf build_report()/build_consolidated_report() sowie mehrere Listen
++# verteilt.
++COVERAGE_SHEET_SPEC = SheetSpec(
++    sheet_name=COVERAGE_SHEET_NAME,
++    columns=COVERAGE_COLUMNS,
++    decimal_columns=COVERAGE_DECIMAL_COLUMNS,
++)
++
++LEAD_TIME_SHEET_SPEC = SheetSpec(
++    sheet_name=LEAD_TIME_SHEET_NAME,
++    columns=LEAD_TIME_COLUMNS,
++    decimal_columns=LEAD_TIME_DECIMAL_COLUMNS,
++    currency_columns=LEAD_TIME_CURRENCY_COLUMNS,
++)
++
++SIMULATION_SHEET_SPEC = SheetSpec(
++    sheet_name=SIMULATION_SHEET_NAME,
++    columns=SIMULATION_COLUMNS,
++    decimal_columns=SIMULATION_DECIMAL_COLUMNS,
++    percent_columns=SIMULATION_PERCENT_COLUMNS,
++)
++
++
++def _build_trend_sheet(
++    trend_df: pd.DataFrame | None,
++    writer: pd.ExcelWriter,
++    fmt: _FormatCollector,
++) -> tuple[list[str], list[str]]:
++    """Schreibt den Reiter TREND_SHEET_NAME (Trend_MVER), sofern trend_df
++    gesetzt ist. Bewusst NICHT Teil des generischen SheetSpec-Mechanismus
++    (siehe Modul-Kommentar oben) - dynamische Monatsspalten erfordern eine
++    eigene Spaltenzusammenstellung. Identisch zur bisherigen Logik in
++    build_report(), nur ausgelagert.
++
++    Returns:
++        (trend_month_columns, trend_decimal_columns) - werden vom Aufrufer
++        an _apply_formatting() weitergereicht (Outlier-Highlighting braucht
++        trend_month_columns als Spalten-Lookup).
++    """
++    if trend_df is None:
++        return [], []
++
++    trend_month_columns = [
++        col for col in trend_df.columns
++        if col not in ("Material",) and col not in TREND_METRIC_COLUMNS
++    ]
++    trend_columns = ["Material"] + trend_month_columns + [
++        col for col in TREND_METRIC_COLUMNS if col in trend_df.columns
++    ]
++    _write_sheet(trend_df[trend_columns], writer, TREND_SHEET_NAME)
++    trend_decimal_columns = [
++        col for col in TREND_DECIMAL_COLUMNS if col in trend_columns
++    ] + trend_month_columns
++    fmt.decimal_columns += trend_decimal_columns
++    return trend_month_columns, trend_decimal_columns
++
++
++def _build_trend_details_sheet(
++    details_df: pd.DataFrame | None,
++    writer: pd.ExcelWriter,
++    fmt: _FormatCollector,
++) -> tuple[list[str], list[str], list[str]]:
++    """Schreibt den Reiter TREND_DETAILS_SHEET_NAME (Trend_Details), sofern
++    details_df gesetzt ist. Bewusst NICHT Teil des generischen SheetSpec-
++    Mechanismus (siehe Modul-Kommentar oben) - Z-Score-Paarspalten je Monat
++    erfordern eine eigene Spaltenzusammenstellung. Identisch zur bisherigen
++    Logik in build_report(), nur ausgelagert.
++
++    Returns:
++        (details_value_columns, details_zscore_columns, details_metric_columns)
++        - werden vom Aufrufer an _apply_formatting() weitergereicht.
++    """
++    if details_df is None:
++        return [], [], []
++
++    details_value_columns = [
++        col for col in details_df.columns
++        if col not in ("Material",)
++        and col not in TREND_DETAILS_METRIC_COLUMNS
++        and not col.endswith("_ZScore")
++    ]
++    details_zscore_columns = [f"{col}_ZScore" for col in details_value_columns]
++    details_metric_columns = [
++        col for col in TREND_DETAILS_METRIC_COLUMNS if col in details_df.columns
++    ]
++    details_columns = ["Material"] + details_metric_columns
++    for value_col, zscore_col in zip(details_value_columns, details_zscore_columns):
++        details_columns.append(value_col)
++        if zscore_col in details_df.columns:
++            details_columns.append(zscore_col)
++    _write_sheet(details_df[details_columns], writer, TREND_DETAILS_SHEET_NAME)
++    fmt.decimal_columns += details_value_columns + details_zscore_columns + details_metric_columns
++    return details_value_columns, details_zscore_columns, details_metric_columns
++
++
+ def build_report(
+     df: pd.DataFrame,
+     cfg: RunConfig,
+@@ -319,170 +530,183 @@
+     """Baut den kombinierten Excel-Report fuer den ZMLAG-Lauf und speichert
+     ihn unter cfg.report_output_path.
+ 
+-    Erzeugt den Reiter 'ZMLAG_Bestand' mit Materialstammdaten, allen
+-    Stichtags-Werten sowie den berechneten Kennzahlen aus stock_analysis.py.
+-    Zusaetzlich, falls coverage_df uebergeben wird (Phase 2, ab 24.06.2026),
+-    einen zweiten Reiter 'Reichweite' mit dem Ergebnis von
+-    coverage_analysis.build_coverage_table() - Bestandsmenge (Stueck),
+-    Ø-Verbrauch (12 Monate), Planungsfeld und Reichweite (Stock-only).
+-    Enthaelt sowohl das rohe SAP-Kuerzel (MatStatus, z.B. 'F') als auch den
+-    Klartext (MatStatus_Bezeichnung, z.B. 'Freigegeben') - Max arbeitet im
+-    Tagesgeschaeft mit den Kuerzeln, daher bewusst beide Spalten (Klaerung
+-    24.06.2026).
+-    Zusaetzlich, falls trend_df uebergeben wird (Phase 3, ab 25.06.2026),
+-    einen dritten Reiter 'Trend_MVER' mit dem Ergebnis von
+-    trend_analysis.build_trend_table() - rohe 36-Monats-Zeitreihe (eine
+-    Spalte je Monat) plus Trend-, Sondereffekt- und Saisonalitaets-
+-    Kennzahlen. Als Sondereffekt erkannte Zellen in den Monatsspalten werden
+-    farblich hervorgehoben (siehe outlier_cells), der Zahlenwert selbst
+-    bleibt dabei unveraendert sichtbar.
+-    Zusaetzlich, falls details_df uebergeben wird (Transparenz-Erweiterung,
+-    ab 25.06.2026), einen vierten Reiter 'Trend_Details' - macht die
+-    Sondereffekt-Erkennung aus Trend_MVER vollstaendig nachvollziehbar:
+-    Median und MAD je Material sowie der modifizierte Z-Score JEDES
+-    einzelnen Monats (nicht nur das Endergebnis). Dient Max dazu,
+-    Analyseergebnisse gegenueber dem COO fundiert erklaeren zu koennen.
+-    Zusaetzlich, falls lead_time_df uebergeben wird (Phase 4, ab
+-    25.06.2026), einen fuenften Reiter 'Wiederbeschaffung' mit dem Ergebnis
+-    von dispo_abcxyz_loader.build_lead_time_table() - Wiederbeschaffungszeit
+-    (Planlieferzeit + WE-Bearbeitungszeit) sowie weitere Dispo_ABCXYZ-Felder,
+-    die teils erst in Phase 5/6 fachlich genutzt werden, aber bereits hier
+-    sichtbar gemacht werden (Entscheidung Max, 25.06.2026: vollstaendig
+-    einlesen statt spaeter erneut anzufassen).
+-    Kuenftige Phasen ergaenzen jeweils einen eigenen, zusaetzlichen Reiter
+-    in derselben Arbeitsmappe (siehe Modul-Docstring).
++    Erzeugt immer den Reiter 'ZMLAG_Bestand' (Materialstammdaten,
++    Stichtags-Werte, Kennzahlen aus stock_analysis.py). Jede weitere Phase
++    ergaenzt - sofern die jeweilige *_df uebergeben wird - einen eigenen
++    Reiter in derselben Arbeitsmappe (siehe SheetSpec-Konstanten und
++    Modul-Kommentar "Generischer Section-Mechanismus" oben):
++        coverage_df       -> Reiter 'Reichweite'      (Phase 2)
++        trend_df          -> Reiter 'Trend_MVER'      (Phase 3)
++        details_df        -> Reiter 'Trend_Details'   (Transparenz-Ergaenzung)
++        lead_time_df      -> Reiter 'Wiederbeschaffung' (Phase 4)
++        simulation_df     -> Reiter 'Simulation_Verbrauch' (Baustein A)
++    Jeder *_df-Parameter ist unabhaengig optional (Default None) und haelt
++    den Aufruf damit abwaertskompatibel fuer Laeufe, die einzelne Phasen
++    (noch) nicht nutzen.
+ 
+     Args:
+         df: vollstaendig angereicherter DataFrame (nach calculate_stock_development
+             und classify_risk_by_abc_xyz aus stock_analysis.py)
+         cfg: aktive RunConfig
+-        coverage_df: optionales Ergebnis von coverage_analysis.build_coverage_table()
+-            fuer dieselbe Technologie. Falls None (Default), wird KEIN
+-            Reichweite-Reiter erzeugt - das haelt den Report fuer Aufrufer
+-            abwaertskompatibel, die Phase 2 noch nicht nutzen (z.B. aeltere
+-            main_single.py-Aufrufe ohne MVER/SE16XXL-Daten).
++        coverage_df: optionales Ergebnis von coverage_analysis.build_coverage_table().
+         trend_df: optionales Ergebnis von trend_analysis.build_trend_table()
+-            (erster Tupel-Eintrag) fuer dieselbe Technologie. Falls None
+-            (Default), wird KEIN Trend_MVER-Reiter erzeugt.
++            (erster Tupel-Eintrag).
+         outlier_cells: optionales Ergebnis von trend_analysis.build_trend_table()
+-            (zweiter Tupel-Eintrag) - Dict {Material: [Monatsspalten-Namen]}
+-            fuer die farbliche Markierung. Wird ignoriert, falls trend_df
+-            None ist.
++            (zweiter Tupel-Eintrag) - Dict {Material: [Monatsspalten-Namen]},
++            genutzt fuer die Markierung in Trend_MVER UND Trend_Details.
+         details_df: optionales Ergebnis von trend_analysis.build_trend_table()
+-            (dritter Tupel-Eintrag, ab 25.06.2026) fuer dieselbe Technologie.
+-            Falls None (Default), wird KEIN Trend_Details-Reiter erzeugt -
+-            unabhaengig davon, ob trend_df gesetzt ist (z.B. fuer
+-            Aufrufer, die Trend_MVER, aber nicht die zusaetzliche
+-            Transparenz-Ebene benoetigen).
++            (dritter Tupel-Eintrag) - unabhaengig von trend_df steuerbar.
+         lead_time_df: optionales Ergebnis von dispo_abcxyz_loader.
+-            build_lead_time_table() (ab 25.06.2026, Phase 4), bereits auf
+-            die Materialien dieser Technologie gefiltert (siehe
+-            dispo_abcxyz_loader.filter_by_materials()). Falls None
+-            (Default), wird KEIN Wiederbeschaffung-Reiter erzeugt.
++            build_lead_time_table(), bereits auf die Materialien dieser
++            Technologie gefiltert.
+         simulation_df: optionales Ergebnis von simulation_analysis.
+-            build_simulation_table() (Baustein A, ab 25.06.2026), bereits
+-            aus coverage_df und trend_df fuer dieselbe Technologie
+-            berechnet. Falls None (Default), wird KEIN
+-            Simulation_Verbrauch-Reiter erzeugt.
++            build_simulation_table().
+     """
+     cfg.output_dir.mkdir(parents=True, exist_ok=True)
+ 
+     period_columns = get_period_columns(df)
+-    zmlag_columns = (
+-        ZMLAG_BASE_COLUMNS + period_columns + ZMLAG_CALCULATED_COLUMNS
++    zmlag_columns = ZMLAG_BASE_COLUMNS + period_columns + ZMLAG_CALCULATED_COLUMNS
++
++    fmt = _FormatCollector(
++        currency_columns=CURRENCY_COLUMNS_FIXED + period_columns,
++        percent_columns=list(PERCENT_COLUMNS),
+     )
+-    currency_columns = CURRENCY_COLUMNS_FIXED + period_columns
+-    decimal_columns: list[str] = []
+-    trend_month_columns: list[str] = []
+-    trend_decimal_columns: list[str] = []
+-    details_value_columns: list[str] = []
+-    details_zscore_columns: list[str] = []
+ 
+     with pd.ExcelWriter(cfg.report_output_path, engine="openpyxl") as writer:
+         _write_sheet(df[zmlag_columns], writer, ZMLAG_SHEET_NAME)
+ 
+-        if coverage_df is not None:
+-            available_coverage_columns = [
+-                col for col in COVERAGE_COLUMNS if col in coverage_df.columns
+-            ]
+-            _write_sheet(coverage_df[available_coverage_columns], writer, COVERAGE_SHEET_NAME)
+-            decimal_columns = [
+-                col for col in COVERAGE_DECIMAL_COLUMNS if col in available_coverage_columns
+-            ]
+-
+-        if trend_df is not None:
+-            trend_month_columns = [
+-                col for col in trend_df.columns
+-                if col not in ("Material",) and col not in TREND_METRIC_COLUMNS
+-            ]
+-            trend_columns = ["Material"] + trend_month_columns + [
+-                col for col in TREND_METRIC_COLUMNS if col in trend_df.columns
+-            ]
+-            _write_sheet(trend_df[trend_columns], writer, TREND_SHEET_NAME)
+-            trend_decimal_columns = [
+-                col for col in TREND_DECIMAL_COLUMNS if col in trend_columns
+-            ] + trend_month_columns
+-
+-        if details_df is not None:
+-            details_value_columns = [
+-                col for col in details_df.columns
+-                if col not in ("Material",)
+-                and col not in TREND_DETAILS_METRIC_COLUMNS
+-                and not col.endswith("_ZScore")
+-            ]
+-            details_zscore_columns = [f"{col}_ZScore" for col in details_value_columns]
+-            details_columns = (
+-                ["Material"]
+-                + [col for col in TREND_DETAILS_METRIC_COLUMNS if col in details_df.columns]
+-            )
+-            for value_col, zscore_col in zip(details_value_columns, details_zscore_columns):
+-                details_columns.append(value_col)
+-                if zscore_col in details_df.columns:
+-                    details_columns.append(zscore_col)
+-            _write_sheet(details_df[details_columns], writer, TREND_DETAILS_SHEET_NAME)
+-
+-        if lead_time_df is not None:
+-            available_lead_time_columns = [
+-                col for col in LEAD_TIME_COLUMNS if col in lead_time_df.columns
+-            ]
+-            _write_sheet(lead_time_df[available_lead_time_columns], writer, LEAD_TIME_SHEET_NAME)
+-            decimal_columns = decimal_columns + [
+-                col for col in LEAD_TIME_DECIMAL_COLUMNS if col in available_lead_time_columns
+-            ]
+-            currency_columns = currency_columns + [
+-                col for col in LEAD_TIME_CURRENCY_COLUMNS if col in available_lead_time_columns
+-            ]
+-
+-        percent_columns = list(PERCENT_COLUMNS)
+-        if simulation_df is not None:
+-            available_simulation_columns = [
+-                col for col in SIMULATION_COLUMNS if col in simulation_df.columns
+-            ]
+-            _write_sheet(simulation_df[available_simulation_columns], writer, SIMULATION_SHEET_NAME)
+-            decimal_columns = decimal_columns + [
+-                col for col in SIMULATION_DECIMAL_COLUMNS if col in available_simulation_columns
+-            ]
+-            percent_columns = percent_columns + [
+-                col for col in SIMULATION_PERCENT_COLUMNS if col in available_simulation_columns
+-            ]
++        _build_single_sheet(COVERAGE_SHEET_SPEC, coverage_df, writer, fmt)
++        trend_month_columns, trend_decimal_columns = _build_trend_sheet(trend_df, writer, fmt)
++        details_value_columns, details_zscore_columns, details_metric_columns = (
++            _build_trend_details_sheet(details_df, writer, fmt)
++        )
++        _build_single_sheet(LEAD_TIME_SHEET_SPEC, lead_time_df, writer, fmt)
++        _build_single_sheet(SIMULATION_SHEET_SPEC, simulation_df, writer, fmt)
+ 
+     _apply_formatting(
+         cfg.report_output_path,
+-        currency_columns,
+-        percent_columns,
+-        decimal_columns=decimal_columns,
++        fmt.currency_columns,
++        fmt.percent_columns,
++        decimal_columns=fmt.decimal_columns,
+         trend_decimal_columns=trend_decimal_columns,
+         outlier_cells=outlier_cells if trend_df is not None else None,
+         trend_month_columns=trend_month_columns,
+         details_value_columns=details_value_columns,
+         details_zscore_columns=details_zscore_columns,
+         details_outlier_cells=outlier_cells if details_df is not None else None,
+-        details_metric_columns=[
+-            col for col in TREND_DETAILS_METRIC_COLUMNS if details_df is not None and col in details_df.columns
+-        ],
++        details_metric_columns=details_metric_columns,
+     )
+ 
+ 
++def _build_consolidated_trend_sheet(
++    per_technology_trend_dfs: dict[str, pd.DataFrame] | None,
++    per_technology_dfs: dict[str, pd.DataFrame],
++    per_technology_outlier_cells: dict[str, dict[str, list[str]]] | None,
++    writer: pd.ExcelWriter,
++    fmt: _FormatCollector,
++) -> tuple[list[str], list[str], dict[str, list[str]]]:
++    """Konsolidierte Variante von _build_trend_sheet() (siehe dort fuer den
++    Grund, warum Trend_MVER nicht im generischen SheetSpec-Mechanismus
++    steckt). Identisch zur bisherigen Logik in build_consolidated_report(),
++    nur ausgelagert.
++
++    Returns:
++        (trend_month_columns, trend_decimal_columns, combined_outlier_cells)
++    """
++    combined_outlier_cells: dict[str, list[str]] = {}
++    if not per_technology_trend_dfs:
++        return [], [], combined_outlier_cells
++
++    trend_parts = []
++    for slug, trend_df in per_technology_trend_dfs.items():
++        part = trend_df.copy()
++        part["Technologie"] = per_technology_dfs[slug]["Technologie"].iloc[0]
++        trend_parts.append(part)
++        # outlier_cells ist je Technologie-Slug auf Material-Ebene eindeutig
++        # (ein Material gehoert genau einer Technologie an) - einfaches
++        # Zusammenfuehren der Dicts ist daher unproblematisch.
++        if per_technology_outlier_cells and slug in per_technology_outlier_cells:
++            combined_outlier_cells.update(per_technology_outlier_cells[slug])
++
++    combined_trend = pd.concat(trend_parts, ignore_index=True, sort=False)
++
++    trend_month_columns = sorted(
++        {
++            col
++            for trend_df in per_technology_trend_dfs.values()
++            for col in trend_df.columns
++            if col not in ("Material",) and col not in TREND_METRIC_COLUMNS
++        }
++    )
++    for col in trend_month_columns:
++        if col not in combined_trend.columns:
++            combined_trend[col] = pd.NA
++
++    trend_columns = ["Technologie", "Material"] + trend_month_columns + [
++        col for col in TREND_METRIC_COLUMNS if col in combined_trend.columns
++    ]
++    _write_sheet(combined_trend[trend_columns], writer, TREND_SHEET_NAME)
++    trend_decimal_columns = [
++        col for col in TREND_DECIMAL_COLUMNS if col in trend_columns
++    ] + trend_month_columns
++    fmt.decimal_columns += trend_decimal_columns
++    return trend_month_columns, trend_decimal_columns, combined_outlier_cells
++
++
++def _build_consolidated_trend_details_sheet(
++    per_technology_details_dfs: dict[str, pd.DataFrame] | None,
++    per_technology_dfs: dict[str, pd.DataFrame],
++    writer: pd.ExcelWriter,
++    fmt: _FormatCollector,
++) -> tuple[list[str], list[str], list[str], bool]:
++    """Konsolidierte Variante von _build_trend_details_sheet() (siehe dort
++    fuer den Grund, warum Trend_Details nicht im generischen SheetSpec-
++    Mechanismus steckt). Identisch zur bisherigen Logik in
++    build_consolidated_report(), nur ausgelagert.
++
++    Returns:
++        (details_value_columns, details_zscore_columns, details_metric_columns,
++        was_written) - was_written zeigt an, ob der Reiter erzeugt wurde
++        (fuer die details_outlier_cells-Weitergabe an _apply_formatting()).
++    """
++    if not per_technology_details_dfs:
++        return [], [], [], False
++
++    details_parts = []
++    for slug, details_df in per_technology_details_dfs.items():
++        part = details_df.copy()
++        part["Technologie"] = per_technology_dfs[slug]["Technologie"].iloc[0]
++        details_parts.append(part)
++
++    combined_details = pd.concat(details_parts, ignore_index=True, sort=False)
++
++    details_value_columns = sorted(
++        {
++            col
++            for details_df in per_technology_details_dfs.values()
++            for col in details_df.columns
++            if col not in ("Material",)
++            and col not in TREND_DETAILS_METRIC_COLUMNS
++            and not col.endswith("_ZScore")
++        }
++    )
++    details_zscore_columns = [f"{col}_ZScore" for col in details_value_columns]
++    for col in details_value_columns + details_zscore_columns:
++        if col not in combined_details.columns:
++            combined_details[col] = pd.NA
++
++    details_metric_columns = [
++        col for col in TREND_DETAILS_METRIC_COLUMNS if col in combined_details.columns
++    ]
++    details_columns = ["Technologie", "Material"] + details_metric_columns
++    for value_col, zscore_col in zip(details_value_columns, details_zscore_columns):
++        details_columns.append(value_col)
++        details_columns.append(zscore_col)
++    _write_sheet(combined_details[details_columns], writer, TREND_DETAILS_SHEET_NAME)
++    fmt.decimal_columns += details_value_columns + details_zscore_columns + details_metric_columns
++    return details_value_columns, details_zscore_columns, details_metric_columns, True
++
++
+ def build_consolidated_report(
+     per_technology_dfs: dict[str, pd.DataFrame],
+     output_path,
+@@ -497,10 +721,10 @@
+     gemeinsamen Tabelle (Reiter 'Alle_Technologien'), zusaetzlich zu den
+     weiterhin separat erzeugten Einzelreports je Technologie (build_report).
+ 
+-    Hintergrund (Multi-Technologie-Lauf, siehe main_all.py): Wenn alle 8
++    Hintergrund (Multi-Technologie-Lauf, siehe main.py): Wenn alle 8
+     Technologien in einem Durchlauf verarbeitet werden, soll neben den
+     gewohnten 8 Einzelreports auch ein Gesamtueberblick entstehen. Die
+-    Spalte 'Technologie' (jetzt materialgenau aus SAP, siehe data_loader.py)
++    Spalte 'Technologie' (materialgenau aus SAP, siehe data_loader.py)
+     erlaubt es, in dieser gemeinsamen Tabelle nach Technologie zu filtern
+     oder zu pivotieren, ohne dass dafuer mehrere Reiter noetig sind.
+ 
+@@ -509,24 +733,11 @@
+     Vereinigung aller in irgendeiner Technologie vorkommenden Stichtags-
+     Spalten verwendet; fehlende Werte je Material bleiben leer (NaN).
+ 
+-    Zusaetzlich, falls per_technology_coverage_dfs uebergeben wird (Phase 2,
+-    ab 24.06.2026): ein technologieuebergreifender 'Reichweite'-Reiter,
+-    analog zum bestehenden Reichweite-Reiter in den Einzelreports
+-    (build_report), aber ueber ALLE Technologien hinweg in einer Tabelle.
+-    Der Reichweite-Reiter in coverage_analysis.build_coverage_table() traegt
+-    selbst keine 'Technologie'-Spalte (er wird pro Lauf fuer genau eine
+-    Technologie berechnet) - diese wird hier beim Zusammenfuehren je
+-    Technologie-Slug aus per_technology_dfs ergaenzt, damit sich die
+-    konsolidierte Reichweite-Tabelle nach Technologie filtern laesst.
+-
+-    Zusaetzlich, falls per_technology_trend_dfs uebergeben wird (Phase 3, ab
+-    25.06.2026): ein technologieuebergreifender 'Trend_MVER'-Reiter, analog
+-    zum Reichweite-Reiter aufgebaut (gemeinsame Tabelle ueber alle
+-    Technologien, ergaenzt um die Spalte 'Technologie'). Die Monatsspalten
+-    sind ueber alle Technologien hinweg identisch benannt (gleiches
+-    reference_date/window_months fuer den gesamten Lauf, siehe
+-    main.py._load_phase2_sources()), daher genuegt die Vereinigung aller
+-    vorkommenden Monatsspalten (analog zu all_period_columns).
++    Jede weitere Phase ergaenzt - sofern das jeweilige per_technology_*_dfs
++    uebergeben wird - einen technologieuebergreifenden Reiter, analog zu
++    build_report() aber mit allen Technologien in EINER Tabelle (ergaenzt
++    um die Spalte 'Technologie'). Siehe SheetSpec-Konstanten und Modul-
++    Kommentar "Generischer Section-Mechanismus" oben.
+ 
+     Args:
+         per_technology_dfs: Mapping Technologie-Slug -> vollstaendig
+@@ -535,34 +746,23 @@
+             Technologie uebergeben wird.
+         output_path: Zielpfad fuer die konsolidierte Excel-Datei.
+         per_technology_coverage_dfs: optionales Mapping Technologie-Slug ->
+-            Ergebnis von coverage_analysis.build_coverage_table() fuer
+-            dieselbe Technologie (analog zum coverage_df-Parameter von
+-            build_report()). Falls None (Default) oder leer, wird KEIN
+-            konsolidierter Reichweite-Reiter erzeugt - haelt den Aufruf
+-            abwaertskompatibel fuer Faelle ohne Phase-2-Daten.
++            coverage_df. Falls None/leer, wird KEIN konsolidierter
++            Reichweite-Reiter erzeugt.
+         per_technology_trend_dfs: optionales Mapping Technologie-Slug ->
+-            trend_df (erster Tupel-Eintrag von trend_analysis.build_trend_table())
+-            fuer dieselbe Technologie. Falls None/leer, wird KEIN
++            trend_df (erster Tupel-Eintrag). Falls None/leer, wird KEIN
+             konsolidierter Trend_MVER-Reiter erzeugt.
+         per_technology_outlier_cells: optionales Mapping Technologie-Slug ->
+-            outlier_cells (zweiter Tupel-Eintrag) fuer dieselbe Technologie,
+-            fuer die farbliche Markierung im konsolidierten Reiter.
++            outlier_cells (zweiter Tupel-Eintrag), fuer die farbliche
++            Markierung im konsolidierten Reiter.
+         per_technology_details_dfs: optionales Mapping Technologie-Slug ->
+-            details_df (dritter Tupel-Eintrag von trend_analysis.
+-            build_trend_table(), ab 25.06.2026) fuer dieselbe Technologie.
+-            Falls None/leer, wird KEIN konsolidierter Trend_Details-Reiter
+-            erzeugt - analog zum bestehenden Aufbau von per_technology_
+-            trend_dfs.
++            details_df (dritter Tupel-Eintrag). Falls None/leer, wird KEIN
++            konsolidierter Trend_Details-Reiter erzeugt.
+         per_technology_lead_time_dfs: optionales Mapping Technologie-Slug ->
+-            lead_time_df (Ergebnis von dispo_abcxyz_loader.
+-            build_lead_time_table(), bereits gefiltert auf die Materialien
+-            dieser Technologie, ab 25.06.2026, Phase 4). Falls None/leer,
+-            wird KEIN konsolidierter Wiederbeschaffung-Reiter erzeugt.
++            lead_time_df. Falls None/leer, wird KEIN konsolidierter
++            Wiederbeschaffung-Reiter erzeugt.
+         per_technology_simulation_dfs: optionales Mapping Technologie-Slug ->
+-            simulation_df (Ergebnis von simulation_analysis.
+-            build_simulation_table(), Baustein A, ab 25.06.2026). Falls
+-            None/leer, wird KEIN konsolidierter Simulation_Verbrauch-Reiter
+-            erzeugt.
++            simulation_df. Falls None/leer, wird KEIN konsolidierter
++            Simulation_Verbrauch-Reiter erzeugt.
+     """
+     combined = pd.concat(per_technology_dfs.values(), ignore_index=True, sort=False)
+ 
+@@ -580,186 +780,47 @@
+         if col not in combined.columns:
+             combined[col] = pd.NA
+ 
+-    currency_columns = CURRENCY_COLUMNS_FIXED + all_period_columns
+-    decimal_columns: list[str] = []
+-
+-    combined_coverage: pd.DataFrame | None = None
+-    if per_technology_coverage_dfs:
+-        coverage_parts = []
+-        for slug, coverage_df in per_technology_coverage_dfs.items():
+-            part = coverage_df.copy()
+-            # 'Technologie' wird hier ergaenzt (nicht in COVERAGE_COLUMNS
+-            # enthalten, da der Reichweite-Reiter in build_report() pro
+-            # Einzelreport ohnehin nur eine Technologie umfasst und die
+-            # Spalte dort redundant waere) - im konsolidierten Reiter ist
+-            # sie dagegen notwendig, um nach Technologie filtern zu koennen.
+-            label = per_technology_dfs[slug]["Technologie"].iloc[0]
+-            part["Technologie"] = label
+-            coverage_parts.append(part)
+-
+-        combined_coverage = pd.concat(coverage_parts, ignore_index=True, sort=False)
+-
+-        available_coverage_columns = ["Technologie"] + [
+-            col for col in COVERAGE_COLUMNS if col in combined_coverage.columns
+-        ]
+-        combined_coverage = combined_coverage[available_coverage_columns]
+-        decimal_columns = [
+-            col for col in COVERAGE_DECIMAL_COLUMNS if col in available_coverage_columns
+-        ]
+-
+-    combined_trend: pd.DataFrame | None = None
+-    trend_month_columns: list[str] = []
+-    trend_decimal_columns: list[str] = []
+-    combined_outlier_cells: dict[str, list[str]] = {}
+-    if per_technology_trend_dfs:
+-        trend_parts = []
+-        for slug, trend_df in per_technology_trend_dfs.items():
+-            part = trend_df.copy()
+-            label = per_technology_dfs[slug]["Technologie"].iloc[0]
+-            part["Technologie"] = label
+-            trend_parts.append(part)
+-
+-            # outlier_cells ist je Technologie-Slug auf Material-Ebene
+-            # eindeutig (ein Material gehoert genau einer Technologie an) -
+-            # einfaches Zusammenfuehren der Dicts ist daher unproblematisch.
+-            if per_technology_outlier_cells and slug in per_technology_outlier_cells:
+-                combined_outlier_cells.update(per_technology_outlier_cells[slug])
+-
+-        combined_trend = pd.concat(trend_parts, ignore_index=True, sort=False)
+-
+-        trend_month_columns = sorted(
+-            {
+-                col
+-                for trend_df in per_technology_trend_dfs.values()
+-                for col in trend_df.columns
+-                if col not in ("Material",) and col not in TREND_METRIC_COLUMNS
+-            }
+-        )
+-        for col in trend_month_columns:
+-            if col not in combined_trend.columns:
+-                combined_trend[col] = pd.NA
+-
+-        trend_columns = ["Technologie", "Material"] + trend_month_columns + [
+-            col for col in TREND_METRIC_COLUMNS if col in combined_trend.columns
+-        ]
+-        combined_trend = combined_trend[trend_columns]
+-        trend_decimal_columns = [
+-            col for col in TREND_DECIMAL_COLUMNS if col in trend_columns
+-        ] + trend_month_columns
+-
+-    combined_details: pd.DataFrame | None = None
+-    details_value_columns: list[str] = []
+-    details_zscore_columns: list[str] = []
+-    if per_technology_details_dfs:
+-        details_parts = []
+-        for slug, details_df in per_technology_details_dfs.items():
+-            part = details_df.copy()
+-            label = per_technology_dfs[slug]["Technologie"].iloc[0]
+-            part["Technologie"] = label
+-            details_parts.append(part)
+-
+-        combined_details = pd.concat(details_parts, ignore_index=True, sort=False)
+-
+-        details_value_columns = sorted(
+-            {
+-                col
+-                for details_df in per_technology_details_dfs.values()
+-                for col in details_df.columns
+-                if col not in ("Material",)
+-                and col not in TREND_DETAILS_METRIC_COLUMNS
+-                and not col.endswith("_ZScore")
+-            }
+-        )
+-        details_zscore_columns = [f"{col}_ZScore" for col in details_value_columns]
+-        for col in details_value_columns + details_zscore_columns:
+-            if col not in combined_details.columns:
+-                combined_details[col] = pd.NA
+-
+-        details_columns = ["Technologie", "Material"] + [
+-            col for col in TREND_DETAILS_METRIC_COLUMNS if col in combined_details.columns
+-        ]
+-        for value_col, zscore_col in zip(details_value_columns, details_zscore_columns):
+-            details_columns.append(value_col)
+-            details_columns.append(zscore_col)
+-        combined_details = combined_details[details_columns]
+-
+-    combined_lead_time: pd.DataFrame | None = None
+-    lead_time_decimal_columns: list[str] = []
+-    lead_time_currency_columns: list[str] = []
+-    if per_technology_lead_time_dfs:
+-        lead_time_parts = []
+-        for slug, lead_time_df in per_technology_lead_time_dfs.items():
+-            part = lead_time_df.copy()
+-            label = per_technology_dfs[slug]["Technologie"].iloc[0]
+-            part["Technologie"] = label
+-            lead_time_parts.append(part)
+-
+-        combined_lead_time = pd.concat(lead_time_parts, ignore_index=True, sort=False)
+-
+-        available_lead_time_columns = ["Technologie"] + [
+-            col for col in LEAD_TIME_COLUMNS if col in combined_lead_time.columns
+-        ]
+-        combined_lead_time = combined_lead_time[available_lead_time_columns]
+-        lead_time_decimal_columns = [
+-            col for col in LEAD_TIME_DECIMAL_COLUMNS if col in available_lead_time_columns
+-        ]
+-        lead_time_currency_columns = [
+-            col for col in LEAD_TIME_CURRENCY_COLUMNS if col in available_lead_time_columns
+-        ]
+-
+-    combined_simulation: pd.DataFrame | None = None
+-    simulation_decimal_columns: list[str] = []
+-    simulation_percent_columns: list[str] = []
+-    if per_technology_simulation_dfs:
+-        simulation_parts = []
+-        for slug, simulation_df in per_technology_simulation_dfs.items():
+-            part = simulation_df.copy()
+-            label = per_technology_dfs[slug]["Technologie"].iloc[0]
+-            part["Technologie"] = label
+-            simulation_parts.append(part)
+-
+-        combined_simulation = pd.concat(simulation_parts, ignore_index=True, sort=False)
+-
+-        available_simulation_columns = ["Technologie"] + [
+-            col for col in SIMULATION_COLUMNS if col in combined_simulation.columns
+-        ]
+-        combined_simulation = combined_simulation[available_simulation_columns]
+-        simulation_decimal_columns = [
+-            col for col in SIMULATION_DECIMAL_COLUMNS if col in available_simulation_columns
+-        ]
+-        simulation_percent_columns = [
+-            col for col in SIMULATION_PERCENT_COLUMNS if col in available_simulation_columns
+-        ]
++    fmt = _FormatCollector(
++        currency_columns=CURRENCY_COLUMNS_FIXED + all_period_columns,
++        percent_columns=list(PERCENT_COLUMNS),
++    )
+ 
+     output_path.parent.mkdir(parents=True, exist_ok=True)
+     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+         _write_sheet(combined[consolidated_columns], writer, CONSOLIDATED_SHEET_NAME)
+-        if combined_coverage is not None:
+-            _write_sheet(combined_coverage, writer, COVERAGE_SHEET_NAME)
+-        if combined_trend is not None:
+-            _write_sheet(combined_trend, writer, TREND_SHEET_NAME)
+-        if combined_details is not None:
+-            _write_sheet(combined_details, writer, TREND_DETAILS_SHEET_NAME)
+-        if combined_lead_time is not None:
+-            _write_sheet(combined_lead_time, writer, LEAD_TIME_SHEET_NAME)
+-        if combined_simulation is not None:
+-            _write_sheet(combined_simulation, writer, SIMULATION_SHEET_NAME)
++
++        _build_consolidated_sheet(
++            COVERAGE_SHEET_SPEC, per_technology_coverage_dfs, per_technology_dfs, writer, fmt
++        )
++        trend_month_columns, trend_decimal_columns, combined_outlier_cells = (
++            _build_consolidated_trend_sheet(
++                per_technology_trend_dfs, per_technology_dfs, per_technology_outlier_cells, writer, fmt
++            )
++        )
++        details_value_columns, details_zscore_columns, details_metric_columns, details_written = (
++            _build_consolidated_trend_details_sheet(
++                per_technology_details_dfs, per_technology_dfs, writer, fmt
++            )
++        )
++        _build_consolidated_sheet(
++            LEAD_TIME_SHEET_SPEC, per_technology_lead_time_dfs, per_technology_dfs, writer, fmt
++        )
++        _build_consolidated_sheet(
++            SIMULATION_SHEET_SPEC, per_technology_simulation_dfs, per_technology_dfs, writer, fmt
++        )
+ 
+     _apply_formatting(
+         output_path,
+-        currency_columns + lead_time_currency_columns,
+-        PERCENT_COLUMNS + simulation_percent_columns,
+-        decimal_columns=decimal_columns + lead_time_decimal_columns + simulation_decimal_columns,
++        fmt.currency_columns,
++        fmt.percent_columns,
++        decimal_columns=fmt.decimal_columns,
+         trend_decimal_columns=trend_decimal_columns,
+-        outlier_cells=combined_outlier_cells if combined_trend is not None else None,
++        outlier_cells=combined_outlier_cells if trend_month_columns else None,
+         trend_month_columns=trend_month_columns,
+         details_value_columns=details_value_columns,
+         details_zscore_columns=details_zscore_columns,
+-        details_outlier_cells=combined_outlier_cells if combined_details is not None else None,
+-        details_metric_columns=[
+-            col for col in TREND_DETAILS_METRIC_COLUMNS
+-            if combined_details is not None and col in combined_details.columns
+-        ],
++        details_outlier_cells=combined_outlier_cells if details_written else None,
++        details_metric_columns=details_metric_columns,
+     )
+ 
+ 

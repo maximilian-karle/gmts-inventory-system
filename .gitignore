@@ -1,0 +1,80 @@
+# === Python ===
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.egg-info/
+
+# === Editor / OS ===
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# === Secrets / Umgebung ===
+.env
+.env.*
+*.key
+
+# === SAP-Rohdaten & Reports: NICHT versionieren ===
+# Erfasst Dateien auf JEDER Ebene unterhalb von input_data/ bzw. output_data/
+# (nicht nur eine Ebene tief wie zuvor) - inkl. ZMLAG/MVER/SE16XXL-Exporte,
+# die direkt unter input_data/ liegen (Gesamtexport-Modus), sowie
+# konsolidierte Reports/Dashboards direkt unter output_data/.
+input_data/
+output_data/
+
+# Zur Sicherheit zusaetzlich global nach Dateityp, falls Exporte/Reports
+# versehentlich ausserhalb dieser Ordner abgelegt werden:
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+*.parquet
+
+# Geplante persistente Override-/Kommentar-Dateien (Planungsfeld-Ruckkanal,
+# siehe Projektstatus Abschnitt 3) - sobald eingefuehrt, ebenfalls intern:
+planning_overrides.xlsx
+material_comments.xlsx
+
+# Generierte HTML-Dashboards enthalten Klartext-Bestandsdaten
+*_dashboard.html
+output_data/**/*.html
+
+# === Referenzmaterialien: nicht oeffentlich verteilbar ===
+# Lehrbuchauszuege, internes Whitepaper, urspruengliche Anforderungsliste -
+# unabhaengig vom Ablageort im Repo (docs/, referenzen/, Projekt-Root, ...).
+# Hinweis: echte Dateinamen enthalten Leerzeichen ("Global Supply Chain
+# and Operations.txt"), Pattern deckt zur Sicherheit BEIDE Schreibweisen
+# (Leerzeichen und Unterstrich) ab, falls Kopien mit anderem Trenner existieren.
+Initiale_Informationen
+Initiale Informationen
+Initiale_Informationen.*
+Initiale Informationen.*
+Inventory_Management_I.pdf
+Inventory Management I.pdf
+Global_Supply_Chain_and_Operations*.txt
+Global Supply Chain and Operations*.txt
+Introduction_to_Supply_Chain_Analyt*.txt
+Introduction to Supply Chain Analyt*.txt
+**/Initiale_Informationen
+**/Initiale Informationen
+**/Initiale_Informationen.*
+**/Initiale Informationen.*
+**/Inventory_Management_I.pdf
+**/Inventory Management I.pdf
+**/Global_Supply_Chain_and_Operations*.txt
+**/Global Supply Chain and Operations*.txt
+**/Introduction_to_Supply_Chain_Analyt*.txt
+**/Introduction to Supply Chain Analyt*.txt
+
+# Generischer Auffangschutz: jegliche .pdf/.txt direkt im Projekt-Root
+# (Code/Configs liegen in src/ bzw. docs/, .txt/.pdf im Root sind in diesem
+# Projekt durchgaengig Referenzmaterial, kein Quellcode)
+/*.pdf
+/*.txt
+
+# Genereller Auffangschutz fuer einen evtl. vorhandenen Referenzordner
+docs/referenzen/
+referenzen/
