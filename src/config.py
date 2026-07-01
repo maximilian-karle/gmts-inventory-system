@@ -165,6 +165,27 @@ DAYS_PER_MONTH = 30.0
 
 
 # ---------------------------------------------------------------------------
+# Buckets fuer die Reichweite-vs-Wiederbeschaffung-Matrix (HTML-Dashboard,
+# ab 30.06.2026, siehe html_dashboard.py)
+# ---------------------------------------------------------------------------
+# Monats-Klassen fuer beide Achsen der Matrix (Reichweite je Spalte,
+# Wiederbeschaffungszeit je Zeile) - 1:1 uebernommen aus Max' Referenz-
+# Pivot (Screenshot 30.06.2026): [0-3], [3-6], [6-9], [9-15], [15-20],
+# [20-30], [30-999] Monate. Zentral hier definiert (sichtbare Annahme, kein
+# stiller Default), damit sich die Klassengrenzen an EINER Stelle aendern
+# lassen, ohne html_dashboard.py anzufassen.
+#
+# REICHWEITE_WBZ_BUCKET_EDGES sind die INNEREN Grenzen (untere Grenze 0 und
+# obere Grenze unendlich sind implizit). Ein Wert v faellt in Bucket i, wenn
+# EDGES[i-1] <= v < EDGES[i] (mit EDGES[-1]=0, EDGES[len]=inf). Die Labels
+# beschreiben die resultierenden Klassen fuer die Anzeige.
+REICHWEITE_WBZ_BUCKET_EDGES = [3, 6, 9, 15, 20, 30]
+REICHWEITE_WBZ_BUCKET_LABELS = [
+    "[0-3]", "[3-6]", "[6-9]", "[9-15]", "[15-20]", "[20-30]", "[30-999]",
+]
+
+
+# ---------------------------------------------------------------------------
 # Finanzparameter fuer Working Capital/ROI (Phase 6, ab 30.06.2026)
 # ---------------------------------------------------------------------------
 # Zentrale fachliche Annahmen fuer working_capital.py (analog zu

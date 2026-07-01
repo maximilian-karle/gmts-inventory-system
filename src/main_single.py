@@ -367,6 +367,7 @@ def _process(
         safety_stock_df=safety_stock_df,
         simulation_df=simulation_df,
         working_capital_df=working_capital_df,
+        lead_time_df=technology_lead_time_df,
     )
     print(f"  Executive Summary fuer {len(summary_df)} Material(ien) erstellt.\n")
 

@@ -46,6 +46,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+import config
+
 # Schwelle fuer "kritisches" Fehlmengen-Risiko (Anteil der Monte-Carlo-
 # Laeufe mit Fehlmenge im Planungshorizont) - oberhalb dieser Schwelle wird
 # ein Material unabhaengig von der ABC-Klasse als 'Kritisch' eingestuft.
@@ -121,6 +123,7 @@ def build_executive_summary(
     safety_stock_df: pd.DataFrame | None = None,
     simulation_df: pd.DataFrame | None = None,
     working_capital_df: pd.DataFrame | None = None,
+    lead_time_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Baut die Executive-Summary-Tabelle: eine Zeile pro Material aus
     zmlag_df, angereichert um die wichtigsten Kennzahlen aus den optional
@@ -156,6 +159,14 @@ def build_executive_summary(
             build_working_capital_table() (Phase 6, ab 30.06.2026) - liefert
             Working_Capital_Reduktion und ROI_Prozent. Siehe Projektstatus.md
             Abschnitt 4i fuer die Designklaerung.
+        lead_time_df: optionales Ergebnis von dispo_abcxyz_loader.
+            build_lead_time_table() (Phase 4), bereits auf die Materialien
+            dieser Technologie gefiltert - liefert Wiederbeschaffungszeit_Tage
+            (und daraus abgeleitet Wiederbeschaffungszeit_Monate). Ab
+            30.06.2026 ergaenzt, damit die Reichweite-vs-Wiederbeschaffung-
+            Matrix im HTML-Dashboard (html_dashboard.py) beide Achsen aus
+            EINER Tabelle bedienen kann und die Wiederbeschaffungszeit
+            zusaetzlich im COO-Excel-Reiter Executive_Summary sichtbar wird.
 
     Returns:
         DataFrame mit einer Zeile pro Material, Spalten:
@@ -173,6 +184,10 @@ def build_executive_summary(
               falls vorhanden, sonst NaN)
             - Working_Capital_Reduktion, ROI_Prozent (aus working_capital_df,
               falls vorhanden, sonst NaN; siehe working_capital.py)
+            - Wiederbeschaffungszeit_Tage, Wiederbeschaffungszeit_Monate (aus
+              lead_time_df, falls vorhanden, sonst NaN; Monate = Tage /
+              config.DAYS_PER_MONTH - dieselbe Naeherung wie in den uebrigen
+              Phasen, siehe config.DAYS_PER_MONTH)
             - Prioritaet (siehe _classify_priority(), regelbasiert)
 
     Raises:
@@ -245,6 +260,21 @@ def build_executive_summary(
         ]
         result = result.merge(
             working_capital_df[working_capital_cols], on="Material", how="left"
+        )
+
+    if lead_time_df is not None and "Wiederbeschaffungszeit_Tage" in lead_time_df.columns:
+        result = result.merge(
+            lead_time_df[["Material", "Wiederbeschaffungszeit_Tage"]],
+            on="Material", how="left",
+        )
+        # Wiederbeschaffungszeit in Monate umrechnen, damit sie mit
+        # Reichweite_Monate auf derselben Achse verglichen werden kann (Matrix
+        # im HTML-Dashboard). Bewusst dieselbe einfache DAYS_PER_MONTH-
+        # Naeherung wie in Phase 3/Baustein A (siehe config.py-Kommentar) -
+        # keine kalendergenaue Umrechnung, die im SAP-naeherungsweisen
+        # Ausgangswert ohnehin nicht hinterlegt ist.
+        result["Wiederbeschaffungszeit_Monate"] = (
+            result["Wiederbeschaffungszeit_Tage"] / config.DAYS_PER_MONTH
         )
 
     result["Prioritaet"] = result.apply(_classify_priority, axis=1)
