@@ -13,57 +13,60 @@ Designueberarbeitung (29.06.2026, Klaerung mit Max anhand eines Referenz-
 Screenshots, Plotly-Dash-Enterprise-Beispiel 'Medicare Provider Charges'):
     - EINE HTML-Datei statt bisher 9 (8 Einzeltechnologien + konsolidiert),
       mit einem Technologie-DROPDOWN oben.
-    - KPI-Kacheln oben, Charts im Karten-Layout, Detailtabelle unten.
+    - KPI-Kacheln oben (grosse Zahl + Label).
+    - Datentabelle unten (Executive-Summary-Zeilen).
     - Bewusst REIN CLIENTSEITIG, kein Dash-Server: das Dropdown schaltet
       zwischen BEREITS BEIM ERZEUGEN vorberechneten Panels um (CSS
-      display:none/block), kein Live-Nachrechnen einzelner Plotly-Traces.
+      display:none/block), kein Live-Nachrechnen der Plotly-Charts.
 
-Erweiterung (30.06.2026, Klaerung mit Max - Anforderungsrunde "Dashboard
-uebersichtlicher UND detailreicher"):
-    1. Detailtabelle 'Materialdetails' mit CLIENTSEITIGER Filterung
-       (Volltextsuche + Dropdowns Prioritaet/ABC/Materialstatus) und
-       SORTIERUNG ueber klickbare Spaltenkoepfe. Alle Materialien je
-       Technologie werden eingebettet (vorher auf 100 Zeilen gekappt) -
-       die Begrenzung ergab mit clientseitiger Filterung keinen Sinn mehr.
-    2. Chart 'Top-15 nach Bestandsrisiko (EUR)': verbindet die
-       Fehlmengen-Wahrscheinlichkeit mit dem gebundenen Bestandswert
-       (Bestandsrisiko_EUR = Fehlmengen_Wahrscheinlichkeit * Bestandswert_EUR)
-       je AKTUELL gewaehlter Technologie - ersetzt den frueheren reinen
-       Wahrscheinlichkeits-Balken (Wahrscheinlichkeit allein sagt nichts
-       ueber die wirtschaftliche Tragweite einer Fehlmenge).
-    3. Neue Kachel 'Reichweite-vs-Wiederbeschaffung-Matrix' (Max'
-       Referenz-Pivot, Screenshot 30.06.2026): Kreuztabelle
-       Wiederbeschaffungszeit (Zeilen) x Reichweite (Spalten) in
-       Monatsbuckets, Zellwert = gebundener Bestandswert (EUR). Diagonale
-       (Reichweite ~ WBZ) gelb, oberhalb gruen (Reichweite > WBZ ->
-       Abbaupotential/Ueberbestand), unterhalb rot (Reichweite < WBZ ->
-       Aufbaubedarf/Versorgungsrisiko). Je Zeile 'Potential Abbau'
-       (Summe gruen) und 'Potential Aufbau' (Summe rot), unten ein
-       'Gesamtpotential' (Abbau - Aufbau). Mit ABC-/XYZ-Filter (Slicer wie
-       im Excel-Pivot) - die Matrix wird dafuer als HTML-Tabelle
-       CLIENTSEITIG aus eingebetteten Material-Daten neu gerechnet (die
-       einzige Stelle mit clientseitigem Recompute; bewusst als eigene
-       HTML-Tabelle statt Plotly-Heatmap, um die EUR-Zellwerte und die
-       Potential-Spalten exakt wie im Excel-Pivot abzubilden).
-    4. Neue KPI-Kachel 'Kapital in Reichweite > Ø': gebundenes Kapital,
-       das in ueberdurchschnittlicher Reichweite steckt (pro-rata-Anteil
-       oberhalb des technologie-eigenen Durchschnitts) - siehe
-       _excess_capital_above_mean().
-    5. Globale, technologieunabhaengige Klappabschnitte oben:
-       'Kennzahlen erklaert' (Glossar ROI/WIP/Working Capital/Reichweite/
-       Wiederbeschaffungszeit/Bestandsrisiko etc.) und 'Anforderungs-
-       abdeckung' (Mapping der initialen Anforderungsliste auf den
-       aktuellen Abdeckungsstand, ✓/⚠/✗).
+Anforderungsrunde Max (30.06.2026, Abschnitt 4k Projektstatus.md) - sieben
+Erweiterungen gegenueber der ersten Fassung, umgesetzt in dieser Version:
+    1. Materialdetails-Tabelle filter- und sortierbar (Volltextsuche +
+       Prioritaet/ABC/Status-Dropdowns, klickbare Spaltenkoepfe, KEINE
+       Zeilenkappung mehr - alle Materialien je Technologie eingebettet).
+    2. Chart 'Top-15 nach Bestandsrisiko (EUR)' ersetzt den reinen
+       Wahrscheinlichkeits-Balken: Bestandsrisiko_EUR = Fehlmengen_
+       Wahrscheinlichkeit_Horizont * Bestandswert_EUR.
+    3. Mehr Interaktion: ABC-/XYZ-Slicer an der Matrix, Tabellen-
+       Filterleiste - bewusst NUR Tabelle + Matrix clientseitig
+       interaktiv, die vier Plotly-Charts bleiben vorberechnet.
+    4. Globaler, klappbarer Abschnitt 'Anforderungsabdeckung' (einmal
+       gerendert, technologieunabhaengig).
+    5. Neue Kachel 'Reichweite-vs-Wiederbeschaffung-Matrix' (Kreuztabelle
+       WBZ x Reichweite in Monatsklassen, siehe config.
+       REICHWEITE_WBZ_BUCKET_EDGES/-LABELS), mit Potential-Abbau/-Aufbau-
+       Spalten und ABC-/XYZ-Slicer.
+    6. Neue KPI-Kachel 'Kapital in Reichweite > Ø' (siehe
+       _excess_capital_above_mean()).
+    7. Globaler, klappbarer Glossar-Abschnitt 'Kennzahlen erklaert' plus
+       Tooltips an KPI-Kacheln/Matrix.
 
+Architekturprinzipien bleiben gewahrt: Panels werden weiterhin beim
+Erzeugen VORBERECHNET (Plotly-Charts statisch, kein Live-Recompute).
 Bewusst EIGENSTAENDIGES Modul, NICHT von report_builder.py importiert
-(Modul-Unabhaengigkeit). config wird fuer die zentral gepflegten Matrix-
-Bucket-Grenzen importiert (REICHWEITE_WBZ_BUCKET_EDGES/-LABELS) - eine
-fachliche Annahme, die wie SERVICE_LEVEL_MATRIX nur an EINER Stelle stehen
-soll.
+(Modul-Unabhaengigkeit, analoges Prinzip zu trend_analysis.py/
+mver_loader.py). Die Aggregationslogik fuer die ERSTEN BEIDEN Charts
+(Bestandswert je Technologie, Prioritaets-Verteilung) ist seit 01.07.2026
+mit report_builder.py ueber dashboard_aggregation.py geteilt (Modul-
+Konsolidierung) - das Bestandsrisiko-Chart, die Matrix und die Tabelle
+sind HTML-spezifisch (im Excel-Dashboard nicht vorhanden, siehe
+Projektstatus.md Abschnitt 4k) und bleiben lokal in diesem Modul. Neu
+importiert wird 'config' (fuer die zentral gepflegten Matrix-Bucket-
+Grenzen, siehe config.REICHWEITE_WBZ_BUCKET_EDGES/-LABELS).
+
+Vier Diagramme je Technologie-Panel:
+    1. Bestandswert je Technologie (Balken) - im Einzel-Panel NUR der
+       Balken der gewaehlten Technologie im Kontext der anderen
+       (dunklere Farbe), im 'Alle Technologien'-Panel alle gleichzeitig.
+    2. Prioritaets-Verteilung (Kreisdiagramm).
+    3. Top-15 nach Bestandsrisiko (EUR) - siehe Punkt 2 oben.
+    4. Bestandswert vs. Reichweite (Scatter, "Risikomatrix"), farblich
+       nach ABC-Kennzeichen.
 
 Oeffentliche Hauptfunktion:
     write_combined_dashboard(summary_by_label, output_path,
-        page_title, all_technologies_label) -> schreibt EINE HTML-Datei.
+        all_technologies_label) -> schreibt EINE HTML-Datei mit Dropdown
+        ueber alle uebergebenen Technologien.
 """
 
 from __future__ import annotations
@@ -77,16 +80,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 import config
+from dashboard_aggregation import aggregate_dashboard_data
 
 # ---------------------------------------------------------------------------
 # Workaround: narwhals-Plugin-Discovery auf manchen Windows/Python-3.14-
 # Installationen defekt (Praxisproblem bei Max, 29.06.2026)
 # ---------------------------------------------------------------------------
-# plotly.express nutzt intern 'narwhals'. Bei JEDEM px-Aufruf fragt narwhals
-# ueber importlib.metadata.entry_points() alle Pakete nach Plugins ab; in
-# Max' venv (OneDrive-Pfad mit Leerzeichen) schlaegt das mit 'OSError:
-# [Errno 22]' fehl. Loesung: _discover_entrypoints() defensiv ueberschreiben
-# (leere Liste bei OSError). Siehe Projektstatus.md Abschnitt 4g.
 try:
     import narwhals.plugins as _narwhals_plugins
 
@@ -104,9 +103,6 @@ except ImportError:
     pass
 
 
-# Farben der Prioritaets-Kategorien (an PRIORITY_FILL_COLORS in
-# report_builder.py angelehnt: Rot=Kritisch, Orange=Erhoeht, Gruen=
-# Unauffaellig, Grau=Unbekannt).
 PRIORITY_COLORS = {
     "Kritisch": "#D9534F",
     "Erhoeht": "#F0AD4E",
@@ -116,25 +112,12 @@ PRIORITY_COLORS = {
 
 TOP_N_RISK_MATERIALS = 15
 
-# Akzent-/Karten-Token (Dash-Enterprise-Stil aus dem Referenz-Screenshot).
 ACCENT_COLOR = "#2563EB"
 ACCENT_COLOR_DARK = "#1E3A8A"
-BG_COLOR = "#F1F4F8"
 CARD_BG = "#FFFFFF"
 TEXT_COLOR = "#1F2A33"
-MUTED_TEXT_COLOR = "#6B7785"
 BORDER_COLOR = "#E2E6EB"
 
-# Matrix-Zellfarben (Karten-/Heatmap-Stil, angelehnt an Max' Excel-Pivot:
-# Diagonale gelb, oberhalb gruen, unterhalb rot).
-MATRIX_DIAGONAL_BG = "#FFF8E1"
-MATRIX_OVER_BG = "#E8F5E9"   # Reichweite > WBZ (Abbaupotential)
-MATRIX_UNDER_BG = "#FDECEA"  # Reichweite < WBZ (Aufbaubedarf/Risiko)
-MATRIX_OVER_TEXT = "#1B7F3B"
-MATRIX_UNDER_TEXT = "#C0392B"
-
-# Fuenf KPI-Kacheln (Reihenfolge = Anordnung). Jede wird aus dem jeweiligen
-# summary_df berechnet (siehe _compute_kpis()).
 KPI_DEFINITIONS = [
     ("materialien", "Materialien", "#2563EB",
      "Anzahl der Materialien dieser Technologie im aktuellen Lauf."),
@@ -142,7 +125,7 @@ KPI_DEFINITIONS = [
      "Summe des gebundenen Bestandswerts (Laufender Wert in EUR)."),
     ("reichweite", "Ø Reichweite (Monate)", "#D97706",
      "Durchschnittliche Reichweite = Bestandsmenge / Ø-Monatsverbrauch."),
-    ("kapital_ueber_schnitt", "Kapital in Reichweite > Ø", "#7C3AED",
+    ("kapital_ueber_oe", "Kapital in Reichweite > Ø", "#7C3AED",
      "Gebundenes Kapital, das in ueberdurchschnittlicher Reichweite steckt "
      "(pro-rata-Anteil oberhalb des Durchschnitts dieser Technologie) - "
      "Indikator fuer Ueberbestand/Abbaupotential."),
@@ -151,129 +134,55 @@ KPI_DEFINITIONS = [
      "Wahrscheinlichkeit bzw. A-Material mit erhoehtem Risiko)."),
 ]
 
+TABLE_COLUMNS = [
+    ("Material", "Material", "text"),
+    ("Materialkurztext", "Bezeichnung", "text"),
+    ("ABC-Kennzeichen", "ABC", "text"),
+    ("Bestandswert_EUR", "Bestandswert (EUR)", "num"),
+    ("Bestandsmenge_Stueck", "Menge (Stk.)", "num"),
+    ("Reichweite_Monate", "Reichweite (Mon.)", "num"),
+    ("Wiederbeschaffungszeit_Monate", "WBZ (Mon.)", "num"),
+    ("MatStatus_Bezeichnung", "Status", "text"),
+    ("Fehlmengen_Wahrscheinlichkeit_Horizont", "Fehlmengen-Risiko", "num"),
+    ("Working_Capital_Reduktion", "WC-Reduktion (EUR)", "num"),
+    ("ROI_Prozent", "ROI", "num"),
+    ("Prioritaet", "Priorität", "text"),
+]
 
-def _bucket_index(value: float) -> int | None:
-    """Ordnet einen Monatswert einem Matrix-Bucket-Index zu (siehe
-    config.REICHWEITE_WBZ_BUCKET_EDGES/-LABELS). None, falls value NaN.
-
-    Spiegelt 1:1 die JS-Funktion gmtsBucketIndex() (clientseitige Matrix) -
-    bewusst auch in Python verfuegbar, damit die Bucket-Logik testbar ist.
-    """
-    if value is None or (isinstance(value, float) and pd.isna(value)):
-        return None
-    for i, edge in enumerate(config.REICHWEITE_WBZ_BUCKET_EDGES):
-        if value < edge:
-            return i
-    return len(config.REICHWEITE_WBZ_BUCKET_EDGES)
-
-
-def _aggregate_for_html(summary_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
-    """Berechnet die Aggregations-/Ranking-Tabellen fuer die Charts EINER
-    Technologie (bzw. des zusammengefuehrten 'Alle Technologien'-DataFrames).
-    """
-    result: dict[str, pd.DataFrame] = {}
-
-    if "Technologie" in summary_df.columns:
-        result["bestandswert_je_technologie"] = (
-            summary_df.groupby("Technologie", as_index=False)["Bestandswert_EUR"]
-            .sum()
-            .sort_values("Bestandswert_EUR", ascending=False)
-        )
-    else:
-        result["bestandswert_je_technologie"] = pd.DataFrame(
-            columns=["Technologie", "Bestandswert_EUR"]
-        )
-
-    result["prioritaet_verteilung"] = (
-        summary_df["Prioritaet"].value_counts().rename_axis("Prioritaet")
-        .reset_index(name="Anzahl")
-    )
-
-    # Top-N nach Bestandsrisiko (EUR) = Fehlmengen-Wahrscheinlichkeit *
-    # Bestandswert: verbindet Fehlmengenrisiko mit wirtschaftlicher
-    # Tragweite (Klaerung mit Max, 30.06.2026).
-    if (
-        "Fehlmengen_Wahrscheinlichkeit_Horizont" in summary_df.columns
-        and "Bestandswert_EUR" in summary_df.columns
-    ):
-        risk = summary_df.dropna(
-            subset=["Fehlmengen_Wahrscheinlichkeit_Horizont", "Bestandswert_EUR"]
-        ).copy()
-        risk["Bestandsrisiko_EUR"] = (
-            risk["Fehlmengen_Wahrscheinlichkeit_Horizont"] * risk["Bestandswert_EUR"]
-        )
-        risk = risk[risk["Bestandsrisiko_EUR"] > 0]
-        risk = risk.sort_values("Bestandsrisiko_EUR", ascending=False).head(
-            TOP_N_RISK_MATERIALS
-        )
-        result["top_risiko_materialien"] = risk[
-            ["Material", "Materialkurztext", "Bestandsrisiko_EUR",
-             "Fehlmengen_Wahrscheinlichkeit_Horizont", "Bestandswert_EUR"]
-        ]
-    else:
-        result["top_risiko_materialien"] = pd.DataFrame(
-            columns=["Material", "Materialkurztext", "Bestandsrisiko_EUR",
-                     "Fehlmengen_Wahrscheinlichkeit_Horizont", "Bestandswert_EUR"]
-        )
-
-    if "Reichweite_Monate" in summary_df.columns:
-        scatter = summary_df.dropna(subset=["Bestandswert_EUR", "Reichweite_Monate"])
-        result["wert_vs_reichweite"] = scatter[
-            ["Material", "Materialkurztext", "Bestandswert_EUR",
-             "Reichweite_Monate", "ABC-Kennzeichen"]
-        ]
-    else:
-        result["wert_vs_reichweite"] = pd.DataFrame(
-            columns=["Material", "Materialkurztext", "Bestandswert_EUR",
-                     "Reichweite_Monate", "ABC-Kennzeichen"]
-        )
-
-    return result
+DEFAULT_SORT_COLUMN = "Bestandswert_EUR"
 
 
 def _excess_capital_above_mean(summary_df: pd.DataFrame) -> float:
-    """Berechnet das gebundene Kapital, das in ueberdurchschnittlicher
-    Reichweite steckt (KPI 'Kapital in Reichweite > Ø').
+    """Berechnet die KPI 'Kapital in Reichweite > Ø': das gebundene
+    Kapital, das PRO-RATA oberhalb des Technologie-Durchschnitts der
+    Reichweite gebunden ist.
 
-    Methodik (Klaerung mit Max, 30.06.2026): fuer jedes Material mit
-    Reichweite > Ø (Durchschnitt DIESER Technologie) wird der pro-rata-
-    Kapitalanteil oberhalb des Durchschnitts gezaehlt:
-
-        Ueberschuss_Material = Bestandswert * (Reichweite - Ø) / Reichweite
-
-    Das entspricht "dem in den Reichweite-Monaten ab dem Durchschnitt nach
-    oben gebundenen Kapital" - nicht der gesamte Bestandswert ueber-
-    durchschnittlicher Materialien, sondern nur der Anteil, der den
-    Durchschnitts-Deckungsgrad uebersteigt.
-
-    Returns:
-        Kapitalbetrag (EUR) als float; NaN, falls keine Reichweite-Daten
-        vorliegen.
+    Je Material mit Reichweite_Monate > Durchschnitt:
+        Bestandswert_EUR * (Reichweite_Monate - Durchschnitt) / Reichweite_Monate
+    summiert. Materialien mit Reichweite <= Durchschnitt tragen 0 bei.
     """
-    if "Reichweite_Monate" not in summary_df.columns:
-        return float("nan")
+    if (
+        "Reichweite_Monate" not in summary_df.columns
+        or "Bestandswert_EUR" not in summary_df.columns
+    ):
+        return 0.0
 
-    sub = summary_df.dropna(subset=["Reichweite_Monate"])
-    sub = sub[sub["Reichweite_Monate"] > 0]
-    if sub.empty:
-        return float("nan")
+    valid = summary_df.dropna(subset=["Reichweite_Monate", "Bestandswert_EUR"])
+    valid = valid[valid["Reichweite_Monate"] > 0]
+    if valid.empty:
+        return 0.0
 
-    mean_rw = sub["Reichweite_Monate"].mean()
-    above = sub[sub["Reichweite_Monate"] > mean_rw].dropna(subset=["Bestandswert_EUR"])
+    mean_reichweite = valid["Reichweite_Monate"].mean()
+    above = valid[valid["Reichweite_Monate"] > mean_reichweite]
     if above.empty:
         return 0.0
 
-    excess = (
-        above["Bestandswert_EUR"]
-        * (above["Reichweite_Monate"] - mean_rw)
-        / above["Reichweite_Monate"]
-    ).sum()
-    return float(excess)
+    excess_share = (above["Reichweite_Monate"] - mean_reichweite) / above["Reichweite_Monate"]
+    return float((above["Bestandswert_EUR"] * excess_share).sum())
 
 
 def _compute_kpis(summary_df: pd.DataFrame) -> dict[str, str]:
-    """Berechnet die fuenf KPI-Kachel-Werte (siehe KPI_DEFINITIONS) als
-    fertig formatierte Strings."""
+    """Berechnet die fuenf KPI-Kachel-Werte (siehe KPI_DEFINITIONS)."""
     n_materialien = len(summary_df)
     bestandswert_gesamt = summary_df["Bestandswert_EUR"].sum()
 
@@ -283,7 +192,7 @@ def _compute_kpis(summary_df: pd.DataFrame) -> dict[str, str]:
     else:
         reichweite_mittel = float("nan")
 
-    kapital_ueber = _excess_capital_above_mean(summary_df)
+    kapital_ueber_oe = _excess_capital_above_mean(summary_df)
     n_kritisch = int((summary_df["Prioritaet"] == "Kritisch").sum())
 
     return {
@@ -292,15 +201,13 @@ def _compute_kpis(summary_df: pd.DataFrame) -> dict[str, str]:
         "reichweite": (
             f"{reichweite_mittel:.1f}" if pd.notna(reichweite_mittel) else "–"
         ),
-        "kapital_ueber_schnitt": (
-            f"{kapital_ueber:,.0f} €".replace(",", ".") if pd.notna(kapital_ueber) else "–"
-        ),
+        "kapital_ueber_oe": f"{kapital_ueber_oe:,.0f} €".replace(",", "."),
         "kritisch": f"{n_kritisch:,}".replace(",", "."),
     }
 
 
 def _style_figure(fig: go.Figure) -> go.Figure:
-    """Einheitliches, schlankes Karten-Layout fuer alle Plotly-Figuren."""
+    """Wendet ein einheitliches, schlankes Layout auf eine Plotly-Figur an."""
     fig.update_layout(
         margin=dict(t=48, b=36, l=56, r=24),
         paper_bgcolor=CARD_BG,
@@ -317,9 +224,13 @@ def _style_figure(fig: go.Figure) -> go.Figure:
 def _build_figures(
     summary_df: pd.DataFrame, bestandswert_referenz_df: pd.DataFrame | None = None
 ) -> list[tuple[str, go.Figure]]:
-    """Baut die vier Plotly-Figuren fuer EIN Technologie-Panel. Figuren mit
-    leerer Aggregation werden NICHT erzeugt (analog zur Excel-Variante)."""
-    aggregates = _aggregate_for_html(summary_df)
+    """Baut die vier Plotly-Figuren fuer EIN Technologie-Panel.
+
+    Chart 1+2 nutzen die mit report_builder.py geteilte
+    aggregate_dashboard_data(). Chart 3 (Bestandsrisiko EUR) und Chart 4
+    sind HTML-spezifisch (im Excel-Dashboard nicht vorhanden).
+    """
+    aggregates = aggregate_dashboard_data(summary_df)
     figures: list[tuple[str, go.Figure]] = []
 
     if bestandswert_referenz_df is not None:
@@ -357,34 +268,43 @@ def _build_figures(
         fig.update_traces(textinfo="label+percent")
         figures.append(("Prioritaets-Verteilung", _style_figure(fig)))
 
-    risk_df = aggregates["top_risiko_materialien"]
-    if len(risk_df) > 0:
-        fig = px.bar(
-            risk_df.sort_values("Bestandsrisiko_EUR"),
-            x="Bestandsrisiko_EUR", y="Material",
-            orientation="h",
-            title=f"Top-{TOP_N_RISK_MATERIALS} nach Bestandsrisiko (EUR)",
-            labels={
-                "Bestandsrisiko_EUR": "Bestandsrisiko (EUR) = Wahrscheinlichkeit × Bestandswert",
-            },
-            color="Fehlmengen_Wahrscheinlichkeit_Horizont",
-            color_continuous_scale="Reds",
-            hover_data={
-                "Materialkurztext": True,
-                "Fehlmengen_Wahrscheinlichkeit_Horizont": ":.0%",
-                "Bestandswert_EUR": ":,.0f",
-                "Bestandsrisiko_EUR": ":,.0f",
-            },
-        )
-        fig.update_layout(coloraxis_colorbar=dict(title="Wahrsch.", tickformat=".0%"))
-        figures.append(("Top-Bestandsrisiko", _style_figure(fig)))
+    # --- Chart 3: Top-15 nach Bestandsrisiko (EUR) --------------------------
+    risk_cols = {"Material", "Materialkurztext", "Fehlmengen_Wahrscheinlichkeit_Horizont", "Bestandswert_EUR"}
+    if risk_cols.issubset(summary_df.columns):
+        risk_base = summary_df.dropna(
+            subset=["Fehlmengen_Wahrscheinlichkeit_Horizont", "Bestandswert_EUR"]
+        ).copy()
+        if not risk_base.empty:
+            risk_base["Bestandsrisiko_EUR"] = (
+                risk_base["Fehlmengen_Wahrscheinlichkeit_Horizont"] * risk_base["Bestandswert_EUR"]
+            )
+            top_risk = risk_base.sort_values("Bestandsrisiko_EUR", ascending=False).head(
+                TOP_N_RISK_MATERIALS
+            )
+            if len(top_risk) > 0:
+                fig = px.bar(
+                    top_risk.sort_values("Bestandsrisiko_EUR"),
+                    x="Bestandsrisiko_EUR", y="Material",
+                    orientation="h",
+                    color="Fehlmengen_Wahrscheinlichkeit_Horizont",
+                    color_continuous_scale="Reds",
+                    title=f"Top-{TOP_N_RISK_MATERIALS} nach Bestandsrisiko (EUR)",
+                    labels={
+                        "Bestandsrisiko_EUR": "Bestandsrisiko (EUR) = Wahrscheinlichkeit × Bestandswert",
+                    },
+                    hover_data=["Materialkurztext", "Fehlmengen_Wahrscheinlichkeit_Horizont", "Bestandswert_EUR"],
+                )
+                fig.update_layout(
+                    coloraxis_colorbar=dict(title="Wahrsch.", tickformat=".0%")
+                )
+                figures.append(("Top-Bestandsrisiko", _style_figure(fig)))
 
     scatter_df = aggregates["wert_vs_reichweite"]
     if len(scatter_df) > 0:
         fig = px.scatter(
             scatter_df, x="Reichweite_Monate", y="Bestandswert_EUR",
             color="ABC-Kennzeichen",
-            title="Bestandswert vs. Reichweite",
+            title="Bestandswert vs. Reichweite (Risikomatrix)",
             labels={
                 "Reichweite_Monate": "Reichweite (Monate)",
                 "Bestandswert_EUR": "Bestandswert (EUR)",
@@ -396,271 +316,194 @@ def _build_figures(
     return figures
 
 
-# Spalten der Detail-Tabelle (Reihenfolge = Spaltenreihenfolge). Tupel:
-# (df-Spalte, Anzeige-Label, Sortiertyp 'num'|'text'). Nur Spalten, die in
-# summary_df vorkommen, werden geschrieben.
-TABLE_COLUMNS = [
-    ("Material", "Material", "text"),
-    ("Materialkurztext", "Bezeichnung", "text"),
-    ("ABC-Kennzeichen", "ABC", "text"),
-    ("Bestandswert_EUR", "Bestandswert (EUR)", "num"),
-    ("Bestandsmenge_Stueck", "Menge (Stk.)", "num"),
-    ("Reichweite_Monate", "Reichweite (Mon.)", "num"),
-    ("Wiederbeschaffungszeit_Monate", "WBZ (Mon.)", "num"),
-    ("MatStatus_Bezeichnung", "Status", "text"),
-    ("Fehlmengen_Wahrscheinlichkeit_Horizont", "Fehlmengen-Risiko", "num"),
-    ("Working_Capital_Reduktion", "WC-Reduktion (EUR)", "num"),
-    ("ROI_Prozent", "ROI", "num"),
-    ("Prioritaet", "Priorität", "text"),
-]
+def _build_matrix_payload(summary_df: pd.DataFrame) -> list[dict]:
+    """Baut die Rohdaten fuer die Reichweite-vs-Wiederbeschaffung-Matrix
+    als kompakte Liste von Records - wird als JSON in die Seite
+    eingebettet und dort clientseitig in Buckets aggregiert
+    (gmtsRenderMatrix() in _APP_JS), damit der ABC-/XYZ-Slicer ohne
+    Server-Rundreise funktioniert.
+
+    NUR Materialien mit vorhandenem Bestandswert, Reichweite UND
+    Wiederbeschaffungszeit werden aufgenommen.
+    """
+    required = {"Bestandswert_EUR", "Reichweite_Monate", "Wiederbeschaffungszeit_Monate"}
+    if not required.issubset(summary_df.columns):
+        return []
+
+    valid = summary_df.dropna(
+        subset=["Bestandswert_EUR", "Reichweite_Monate", "Wiederbeschaffungszeit_Monate"]
+    )
+    if valid.empty:
+        return []
+
+    records = []
+    combined_col = "ABCXYZ-Kennzeichen" if "ABCXYZ-Kennzeichen" in valid.columns else None
+    for _, row in valid.iterrows():
+        combined = str(row[combined_col]) if combined_col and pd.notna(row[combined_col]) else ""
+        abc = combined[0] if len(combined) >= 1 else ""
+        xyz = combined[1] if len(combined) >= 2 else ""
+        records.append({
+            "rw": round(float(row["Reichweite_Monate"]), 4),
+            "wbz": round(float(row["Wiederbeschaffungszeit_Monate"]), 4),
+            "val": round(float(row["Bestandswert_EUR"]), 2),
+            "abc": abc,
+            "xyz": xyz,
+        })
+    return records
 
 
 def _format_table_cell(column: str, value) -> str:
-    """Formatiert einen Tabellenwert fuer die Anzeige."""
+    """Formatiert einen einzelnen Tabellenwert fuer die ANZEIGE."""
     if pd.isna(value):
         return "–"
     if column in ("Bestandswert_EUR", "Working_Capital_Reduktion"):
         return f"{value:,.0f} €".replace(",", ".")
-    if column in ("Reichweite_Monate", "Wiederbeschaffungszeit_Monate", "Bestandsmenge_Stueck"):
+    if column in ("Bestandsmenge_Stueck", "Reichweite_Monate", "Wiederbeschaffungszeit_Monate"):
         return f"{value:,.1f}".replace(",", ".")
     if column in ("Fehlmengen_Wahrscheinlichkeit_Horizont", "ROI_Prozent"):
         return f"{value * 100:.0f}%"
     return _html.escape(str(value))
 
 
-def _sort_value(column: str, value, sort_type: str) -> str:
-    """Liefert den maschinenlesbaren Sortierwert (data-sort) fuer eine Zelle.
-    Numerische Spalten als roher float-String (NaN -> leer = ans Ende),
-    Textspalten als Klartext."""
+def _sort_value(column: str, sort_type: str, value) -> str:
+    """Liefert den ROHEN Wert fuer das data-sort-Attribut."""
     if pd.isna(value):
         return ""
     if sort_type == "num":
         return f"{float(value):.6f}"
-    return str(value)
+    return _html.escape(str(value))
 
 
 def _build_table_html(summary_df: pd.DataFrame, panel_id: str) -> str:
-    """Baut die Detail-Tabelle (HTML) fuer EIN Panel - mit Filter-Toolbar
-    (Volltextsuche + Prioritaet/ABC/Status) und sortierbaren Spaltenkoepfen.
-    Alle Materialien werden eingebettet (clientseitige Filterung), initial
-    nach Bestandsrisiko (Wahrscheinlichkeit) absteigend vorsortiert.
+    """Baut die Materialdetails-Tabelle (HTML-Markup) fuer EIN Technologie-
+    Panel: Volltextsuche + Prioritaet/ABC/Status-Filter, klickbare
+    Spaltenkoepfe, ALLE Materialien eingebettet (keine Zeilenkappung).
     """
     if summary_df.empty:
-        return "<p class='empty-hint'>Keine Materialien für diese Technologie.</p>"
+        return ""
 
     available_columns = [
-        (col, label, stype) for col, label, stype in TABLE_COLUMNS
+        (col, label, sort_type) for col, label, sort_type in TABLE_COLUMNS
         if col in summary_df.columns
     ]
 
-    # Vorsortierung: hoechstes Fehlmengen-Risiko zuerst (wie bisher) -
-    # clientseitige Sortierung kann das anschliessend ueberschreiben.
-    if "Fehlmengen_Wahrscheinlichkeit_Horizont" in summary_df.columns:
-        sorted_df = summary_df.sort_values(
-            "Fehlmengen_Wahrscheinlichkeit_Horizont", ascending=False, na_position="last"
-        )
+    if DEFAULT_SORT_COLUMN in summary_df.columns:
+        sorted_df = summary_df.sort_values(DEFAULT_SORT_COLUMN, ascending=False, na_position="last")
     else:
         sorted_df = summary_df
 
-    table_id = f"table-{panel_id}"
+    def _options_html(values: list[str], all_label: str = "Alle") -> str:
+        opts = [f"<option value='__ALLE__'>{_html.escape(all_label)}</option>"]
+        for v in values:
+            opts.append(f"<option value='{_html.escape(v)}'>{_html.escape(v)}</option>")
+        return "".join(opts)
 
-    # --- Filter-Toolbar (Optionen aus den tatsaechlich vorhandenen Werten) ---
-    def _options(series_name: str) -> list[str]:
-        if series_name not in summary_df.columns:
-            return []
-        vals = sorted(
-            str(v) for v in summary_df[series_name].dropna().unique()
-        )
-        return vals
-
-    prio_opts = _options("Prioritaet")
-    abc_opts = _options("ABC-Kennzeichen")
-    status_opts = _options("MatStatus_Bezeichnung")
-
-    def _select(select_id: str, label: str, options: list[str]) -> str:
-        if not options:
-            return ""
-        opt_html = "<option value='__ALLE__'>Alle</option>" + "".join(
-            f"<option value='{_html.escape(o)}'>{_html.escape(o)}</option>" for o in options
-        )
-        return (
-            f"<label class='filter-label'>{_html.escape(label)}"
-            f"<select id='{select_id}' onchange=\"gmtsFilterTable('{panel_id}')\">"
-            f"{opt_html}</select></label>"
-        )
+    prio_values = sorted(summary_df["Prioritaet"].dropna().unique()) if "Prioritaet" in summary_df.columns else []
+    abc_values = sorted(summary_df["ABC-Kennzeichen"].dropna().unique()) if "ABC-Kennzeichen" in summary_df.columns else []
+    status_values = (
+        sorted(summary_df["MatStatus_Bezeichnung"].dropna().unique())
+        if "MatStatus_Bezeichnung" in summary_df.columns else []
+    )
 
     toolbar = (
-        "<div class='table-toolbar'>"
+        f"<div class='table-toolbar'>"
         f"<input type='search' id='search-{panel_id}' class='table-search' "
         f"placeholder='Material / Bezeichnung suchen …' "
         f"oninput=\"gmtsFilterTable('{panel_id}')\">"
-        f"{_select(f'fprio-{panel_id}', 'Priorität', prio_opts)}"
-        f"{_select(f'fabc-{panel_id}', 'ABC', abc_opts)}"
-        f"{_select(f'fstatus-{panel_id}', 'Status', status_opts)}"
-        f"<span class='table-count' id='count-{panel_id}'></span>"
-        "</div>"
+        f"<label class='filter-label'>Priorität"
+        f"<select id='fprio-{panel_id}' onchange=\"gmtsFilterTable('{panel_id}')\">"
+        f"{_options_html(prio_values)}</select></label>"
+        f"<label class='filter-label'>ABC"
+        f"<select id='fabc-{panel_id}' onchange=\"gmtsFilterTable('{panel_id}')\">"
+        f"{_options_html(abc_values)}</select></label>"
+        f"<label class='filter-label'>Status"
+        f"<select id='fstatus-{panel_id}' onchange=\"gmtsFilterTable('{panel_id}')\">"
+        f"{_options_html(status_values)}</select></label>"
+        f"<span class='table-count' id='count-{panel_id}'>{len(summary_df)} von "
+        f"{len(summary_df)} Materialien</span>"
+        f"</div>"
     )
 
-    # --- Kopfzeile (sortierbar) ---
     header_cells = []
-    for idx, (_col, label, stype) in enumerate(available_columns):
+    for idx, (col, label, sort_type) in enumerate(available_columns):
+        is_default = (col == DEFAULT_SORT_COLUMN)
+        asc_attr = " data-asc='false'" if is_default else ""
+        indicator = "▼" if is_default else ""
         header_cells.append(
-            f"<th data-type='{stype}' "
-            f"onclick=\"gmtsSortTable('{table_id}', {idx}, '{stype}', this)\">"
-            f"{_html.escape(label)}<span class='sort-ind'></span></th>"
+            f"<th data-type='{sort_type}' "
+            f"onclick=\"gmtsSortTable('table-{panel_id}', {idx}, '{sort_type}', this)\""
+            f"{asc_attr}>{_html.escape(label)}<span class='sort-ind'>{indicator}</span></th>"
         )
-    header_html = "".join(header_cells)
 
-    # --- Datenzeilen ---
     rows_html = []
     for _, row in sorted_df.iterrows():
-        search_text = " ".join(
-            str(row.get(c, "")) for c in ("Material", "Materialkurztext")
-        ).lower()
-        data_attrs = (
-            f"data-search=\"{_html.escape(search_text)}\" "
-            f"data-prio=\"{_html.escape(str(row.get('Prioritaet', '')))}\" "
-            f"data-abc=\"{_html.escape(str(row.get('ABC-Kennzeichen', '')))}\" "
-            f"data-status=\"{_html.escape(str(row.get('MatStatus_Bezeichnung', '')))}\""
-        )
+        material = str(row.get("Material", ""))
+        bezeichnung = str(row.get("Materialkurztext", "")) if pd.notna(row.get("Materialkurztext")) else ""
+        search_key = f"{material} {bezeichnung}".strip().lower()
+        prio_attr = _html.escape(str(row["Prioritaet"])) if "Prioritaet" in row and pd.notna(row["Prioritaet"]) else ""
+        abc_attr = _html.escape(str(row["ABC-Kennzeichen"])) if "ABC-Kennzeichen" in row and pd.notna(row["ABC-Kennzeichen"]) else ""
+        status_attr = _html.escape(str(row["MatStatus_Bezeichnung"])) if "MatStatus_Bezeichnung" in row and pd.notna(row["MatStatus_Bezeichnung"]) else ""
+
         cells = []
-        for col, _label, stype in available_columns:
-            value = row[col]
-            sort_val = _html.escape(_sort_value(col, value, stype))
+        for col, _label, sort_type in available_columns:
+            value = row.get(col)
+            sort_val = _sort_value(col, sort_type, value)
             if col == "Prioritaet" and pd.notna(value):
                 color = PRIORITY_COLORS.get(value, "#AAAAAA")
-                inner = (
-                    f"<span class='pill' style='background:{color}22;"
-                    f"color:{color};border:1px solid {color}55;'>"
-                    f"{_html.escape(str(value))}</span>"
+                cells.append(
+                    f"<td data-sort='{sort_val}'><span class='pill' "
+                    f"style='background:{color}22;color:{color};border:1px solid {color}55;'>"
+                    f"{_html.escape(str(value))}</span></td>"
                 )
             else:
-                inner = _format_table_cell(col, value)
-            cells.append(f"<td data-sort='{sort_val}'>{inner}</td>")
-        rows_html.append(f"<tr {data_attrs}>{''.join(cells)}</tr>")
+                cells.append(f"<td data-sort='{sort_val}'>{_format_table_cell(col, value)}</td>")
+        rows_html.append(
+            f"<tr data-search='{_html.escape(search_key)}' data-prio='{prio_attr}' "
+            f"data-abc='{abc_attr}' data-status='{status_attr}'>{''.join(cells)}</tr>"
+        )
 
     return (
         f"{toolbar}"
-        f"<div class='table-wrap'><table id='{table_id}'>"
-        f"<thead><tr>{header_html}</tr></thead>"
-        f"<tbody>{''.join(rows_html)}</tbody></table></div>"
+        f"<div class='table-wrap'>"
+        f"<table id='table-{panel_id}'>"
+        f"<thead><tr>{''.join(header_cells)}</tr></thead>"
+        f"<tbody>{''.join(rows_html)}</tbody>"
+        f"</table></div>"
     )
 
 
-def _matrix_payload(summary_df: pd.DataFrame) -> tuple[str, list[str], list[str], int, int]:
-    """Bereitet die eingebetteten Material-Daten fuer die clientseitige
-    Reichweite-vs-Wiederbeschaffung-Matrix vor.
-
-    Returns:
-        (json_str, abc_options, xyz_options, n_platzierbar, n_gesamt)
-        - json_str: Liste {rw, wbz, val, abc, xyz} als JSON (nur Materialien
-          mit Reichweite UND Wiederbeschaffungszeit UND Bestandswert).
-        - abc_options/xyz_options: vorhandene Klassen fuer die Slicer.
-        - n_platzierbar / n_gesamt: fuer den Abdeckungs-Hinweis unter der
-          Matrix (wie viele Materialien ueberhaupt einsortierbar sind).
+def _build_matrix_html(panel_id: str) -> str:
+    """Baut das statische Geruest (Ueberschrift, ABC-/XYZ-Slicer, leerer
+    Container) fuer die Reichweite-vs-Wiederbeschaffung-Matrix EINES
+    Panels. Der Inhalt wird clientseitig von gmtsRenderMatrix() aus den
+    _build_matrix_payload()-Rohdaten aufgebaut.
     """
-    n_gesamt = len(summary_df)
-    needed = {"Reichweite_Monate", "Wiederbeschaffungszeit_Monate", "Bestandswert_EUR"}
-    if not needed.issubset(summary_df.columns):
-        return "[]", [], [], 0, n_gesamt
-
-    df = summary_df.dropna(
-        subset=["Reichweite_Monate", "Wiederbeschaffungszeit_Monate", "Bestandswert_EUR"]
-    )
-
-    records = []
-    abc_set: set[str] = set()
-    xyz_set: set[str] = set()
-    for _, row in df.iterrows():
-        abc = row.get("ABC-Kennzeichen")
-        abc = str(abc) if pd.notna(abc) else ""
-        # XYZ aus dem kombinierten ABCXYZ-Kennzeichen ableiten (2-stellig,
-        # z.B. "AX" -> "X"); siehe stock_analysis.classify_risk_by_abc_xyz().
-        abcxyz = row.get("ABCXYZ-Kennzeichen")
-        xyz = ""
-        if isinstance(abcxyz, str) and len(abcxyz) == 2:
-            xyz = abcxyz[1]
-        if abc:
-            abc_set.add(abc)
-        if xyz:
-            xyz_set.add(xyz)
-        records.append({
-            "rw": round(float(row["Reichweite_Monate"]), 4),
-            "wbz": round(float(row["Wiederbeschaffungszeit_Monate"]), 4),
-            "val": float(row["Bestandswert_EUR"]),
-            "abc": abc,
-            "xyz": xyz,
-        })
-
     return (
-        json.dumps(records),
-        sorted(abc_set),
-        sorted(xyz_set),
-        len(records),
-        n_gesamt,
-    )
-
-
-def _build_matrix_html(panel_id: str, summary_df: pd.DataFrame) -> str:
-    """Baut die Kachel 'Reichweite-vs-Wiederbeschaffung-Matrix' fuer EIN
-    Panel: ABC-/XYZ-Slicer, ein Container (clientseitig gefuellt) und ein
-    eingebettetes Daten-Skript. Siehe Modul-Docstring Punkt 3."""
-    payload, abc_opts, xyz_opts, n_platzierbar, n_gesamt = _matrix_payload(summary_df)
-
-    if n_platzierbar == 0:
-        return (
-            "<div class='table-card'>"
-            "<h2 class='table-title'>Reichweite-vs-Wiederbeschaffung-Matrix</h2>"
-            "<p class='empty-hint'>Für diese Technologie liegen keine Materialien "
-            "mit gleichzeitig Reichweite UND Wiederbeschaffungszeit vor "
-            "(beide Achsen erforderlich).</p></div>"
-        )
-
-    def _select(select_id: str, label: str, options: list[str]) -> str:
-        opt_html = "<option value='__ALLE__'>(Alle)</option>" + "".join(
-            f"<option value='{_html.escape(o)}'>{_html.escape(o)}</option>" for o in options
-        )
-        return (
-            f"<label class='filter-label'>{label}"
-            f"<select id='{select_id}' onchange=\"gmtsRenderMatrix('{panel_id}')\">"
-            f"{opt_html}</select></label>"
-        )
-
-    note = (
-        "<p class='table-note'>Zeilen = Wiederbeschaffungszeit, Spalten = Reichweite "
-        "(jeweils Monate). Zellwert = gebundener Bestandswert (EUR). "
-        "<span class='legend-dot' style='background:" + MATRIX_DIAGONAL_BG + "'></span> Diagonale "
-        "(ausgewogen) · <span class='legend-dot' style='background:" + MATRIX_OVER_BG + "'></span> "
-        "Reichweite &gt; WBZ → Abbaupotential · "
-        "<span class='legend-dot' style='background:" + MATRIX_UNDER_BG + "'></span> "
-        "Reichweite &lt; WBZ → Aufbaubedarf/Risiko. "
-        f"Einsortierbar: {n_platzierbar} von {n_gesamt} Materialien.</p>"
-    )
-
-    data_script = (
-        f"<script>window.GMTS_MATRIX=window.GMTS_MATRIX||{{}};"
-        f"window.GMTS_MATRIX['{panel_id}']={payload};</script>"
-    )
-
-    return (
-        "<div class='table-card'>"
-        "<h2 class='table-title'>Reichweite-vs-Wiederbeschaffung-Matrix "
-        "<span class='info' title='Kreuztabelle Wiederbeschaffungszeit (Zeilen) "
-        "vs. Reichweite (Spalten) in Monatsklassen. Grün oberhalb der Diagonale = "
-        "Überbestand/Abbaupotential, rot unterhalb = Versorgungsrisiko/Aufbaubedarf.'>ⓘ</span>"
-        "</h2>"
-        "<div class='matrix-controls'>"
-        f"{_select(f'mxabc-{panel_id}', 'ABC', abc_opts)}"
-        f"{_select(f'mxxyz-{panel_id}', 'XYZ', xyz_opts)}"
-        "</div>"
+        f"<div class='table-card'>"
+        f"<h2 class='table-title'>Reichweite-vs-Wiederbeschaffung-Matrix "
+        f"<span class='info' title='Kreuztabelle Wiederbeschaffungszeit (Zeilen) vs. "
+        f"Reichweite (Spalten) in Monatsklassen. Grün oberhalb der Diagonale = "
+        f"Überbestand/Abbaupotential, rot unterhalb = Versorgungsrisiko/"
+        f"Aufbaubedarf.'>ⓘ</span></h2>"
+        f"<div class='matrix-controls'>"
+        f"<label class='filter-label'>ABC"
+        f"<select id='mxabc-{panel_id}' onchange=\"gmtsRenderMatrix('{panel_id}')\">"
+        f"<option value='__ALLE__'>(Alle)</option>"
+        f"<option value='A'>A</option><option value='B'>B</option><option value='C'>C</option>"
+        f"</select></label>"
+        f"<label class='filter-label'>XYZ"
+        f"<select id='mxxyz-{panel_id}' onchange=\"gmtsRenderMatrix('{panel_id}')\">"
+        f"<option value='__ALLE__'>(Alle)</option>"
+        f"<option value='X'>X</option><option value='Y'>Y</option><option value='Z'>Z</option>"
+        f"</select></label>"
+        f"</div>"
         f"<div class='matrix-wrap' id='matrix-{panel_id}'></div>"
-        f"{note}{data_script}"
-        "</div>"
+        f"</div>"
     )
 
 
 def _build_kpi_html(summary_df: pd.DataFrame) -> str:
-    """Baut die KPI-Kachel-Leiste (siehe KPI_DEFINITIONS / _compute_kpis())."""
+    """Baut die KPI-Kachel-Leiste (HTML-Markup) fuer EIN Technologie-Panel."""
     kpi_values = _compute_kpis(summary_df)
     tiles = []
     for key, label, color, tooltip in KPI_DEFINITIONS:
@@ -675,58 +518,8 @@ def _build_kpi_html(summary_df: pd.DataFrame) -> str:
     return f"<div class='kpi-row'>{''.join(tiles)}</div>"
 
 
-def _build_panel_html(
-    label: str,
-    panel_id: str,
-    summary_df: pd.DataFrame,
-    bestandswert_referenz_df: pd.DataFrame | None,
-    is_first: bool,
-) -> tuple[str, bool]:
-    """Baut EIN vollstaendiges Technologie-Panel (KPI-Kacheln + 4 Charts +
-    Matrix-Kachel + Detail-Tabelle) als per CSS ein-/ausblendbaren Block."""
-    display_style = "" if is_first else "display:none;"
-
-    if summary_df.empty:
-        body = (
-            "<p class='empty-hint'>Für diese Technologie liegen aktuell "
-            "keine Daten vor.</p>"
-        )
-        return (
-            f"<section class='tech-panel' id='{panel_id}' style='{display_style}'>"
-            f"{body}</section>",
-            False,
-        )
-
-    kpi_html = _build_kpi_html(summary_df)
-    figures = _build_figures(summary_df, bestandswert_referenz_df=bestandswert_referenz_df)
-
-    chart_blocks = []
-    for i, (_chart_title, fig) in enumerate(figures):
-        include_js = "inline" if (is_first and i == 0) else False
-        chart_html = fig.to_html(full_html=False, include_plotlyjs=include_js)
-        chart_blocks.append(f"<div class='chart-card'>{chart_html}</div>")
-
-    matrix_html = _build_matrix_html(panel_id, summary_df)
-    table_html = _build_table_html(summary_df, panel_id)
-
-    return (
-        f"<section class='tech-panel' id='{panel_id}' style='{display_style}'>"
-        f"{kpi_html}"
-        f"<div class='chart-grid'>{''.join(chart_blocks)}</div>"
-        f"{matrix_html}"
-        f"<div class='table-card'>"
-        f"<h2 class='table-title'>Materialdetails</h2>"
-        f"{table_html}"
-        f"</div>"
-        f"</section>",
-        True,
-    )
-
-
 # ---------------------------------------------------------------------------
-# Globale (technologieunabhaengige) Abschnitte: Glossar + Anforderungs-
-# abdeckung. Einmal gerendert, ueber allen Panels, als aufklappbare
-# <details>-Bloecke (kein JS noetig).
+# Glossar - EINMAL global gerendert, technologieunabhaengig.
 # ---------------------------------------------------------------------------
 _GLOSSARY_ITEMS = [
     ("Working Capital (gebundenes Kapital)",
@@ -735,9 +528,9 @@ _GLOSSARY_ITEMS = [
      "niedriger bei gesicherter Versorgung, desto besser."),
     ("WIP (Work in Progress / Umlaufbestand)",
      "Wert halbfertiger Erzeugnisse, die sich gerade in der Fertigung "
-     "befinden. Hinweis: GMTS weist WIP aktuell NICHT separat aus — der hier "
-     "gezeigte Bestandswert umfasst den Lagerbestand (Bestand × Preis), "
-     "keine Fertigungsstufen. Als Begriff hier nur zur Einordnung."),
+     "befinden. Hinweis: GMTS weist WIP aktuell NICHT separat aus — der "
+     "hier gezeigte Bestandswert umfasst den Lagerbestand (Bestand × "
+     "Preis), keine Fertigungsstufen. Als Begriff hier nur zur Einordnung."),
     ("Holding Cost (Lagerhaltungskosten)",
      "Jährlicher Kostensatz auf den Bestandswert (im Projekt 20% p.a.). "
      "Deckt Kapitalkosten, Lagerfläche, Versicherung und Veralterungsrisiko."),
@@ -747,23 +540,24 @@ _GLOSSARY_ITEMS = [
      "Working_Capital_Aktuell). KEINE klassische ROI-Rechnung gegen "
      "Implementierungskosten."),
     ("Reichweite (Monate)",
-     "Bestandsmenge ÷ durchschnittlicher Monatsverbrauch. Gibt an, wie viele "
-     "Monate der aktuelle Bestand bei unverändertem Verbrauch reicht."),
+     "Bestandsmenge ÷ durchschnittlicher Monatsverbrauch. Gibt an, wie "
+     "viele Monate der aktuelle Bestand bei unverändertem Verbrauch reicht."),
     ("Wiederbeschaffungszeit / WBZ (Monate)",
      "Planlieferzeit + WE-Bearbeitungszeit — wie lange Nachschub dauert. "
      "Wird für die Matrix von Tagen in Monate umgerechnet."),
     ("Bestandsrisiko (EUR)",
      "Fehlmengen-Wahrscheinlichkeit × Bestandswert — der erwartete "
-     "wertmäßige Risikobeitrag eines Materials. Verbindet 'wie wahrscheinlich "
-     "ist eine Fehlmenge' mit 'wie viel Kapital steht dabei auf dem Spiel'."),
+     "wertmäßige Risikobeitrag eines Materials. Verbindet 'wie "
+     "wahrscheinlich ist eine Fehlmenge' mit 'wie viel Kapital steht "
+     "dabei auf dem Spiel'."),
     ("Fehlmengen-Wahrscheinlichkeit",
      "Anteil der Monte-Carlo-Simulationsläufe (Baustein A), in denen das "
      "Material im Planungshorizont in eine Fehlmenge läuft."),
     ("Kapital in Reichweite > Ø",
-     "Gebundenes Kapital, das in überdurchschnittlicher Reichweite steckt: "
-     "pro Material der Anteil oberhalb des Technologie-Durchschnitts "
-     "(Bestandswert × (Reichweite − Ø)/Reichweite). Indikator für "
-     "Überbestand/Abbaupotential."),
+     "Gebundenes Kapital, das in überdurchschnittlicher Reichweite "
+     "steckt: pro Material der Anteil oberhalb des Technologie-"
+     "Durchschnitts (Bestandswert × (Reichweite − Ø)/Reichweite). "
+     "Indikator für Überbestand/Abbaupotential."),
     ("Potential Abbau / Aufbau (Matrix)",
      "Abbau = Bestandskapital oberhalb der Diagonale (Reichweite > WBZ, "
      "Überbestand, freisetzbar). Aufbau = Bestandskapital unterhalb der "
@@ -771,115 +565,164 @@ _GLOSSARY_ITEMS = [
      "Abbau − Aufbau."),
 ]
 
-
-def _build_glossary_html() -> str:
-    items = "".join(
-        f"<div class='glossary-item'><div class='glossary-term'>{_html.escape(term)}</div>"
-        f"<div class='glossary-def'>{_html.escape(definition)}</div></div>"
-        for term, definition in _GLOSSARY_ITEMS
-    )
-    return (
-        "<details class='global-section'>"
-        "<summary>Kennzahlen erklärt (ROI, WIP, Working Capital …)</summary>"
-        f"<div class='glossary-grid'>{items}</div>"
-        "</details>"
-    )
-
-
-# Mapping der initialen Anforderungsliste ('Initiale_Informationen') auf den
-# aktuellen Abdeckungsstand. Status: 'ok' (✓), 'partial' (⚠), 'gap' (✗).
-_REQUIREMENTS = [
-    ("Bestand in Menge und Wert inkl. Stichtag", "ok",
+_REQUIREMENT_COVERAGE = [
+    ("ok", "Bestand in Menge und Wert inkl. Stichtag",
      "KPI Bestandswert + Spalte Menge (ZMLAG €, SE16XXL Stück)."),
-    ("Aufteilung nach Bestandsarten (frei / Q-Prüfung / gesperrt)", "gap",
-     "Datenlücke: SAP liefert nur den Materialstatus, keine mengenmäßige "
-     "Aufteilung."),
-    ("Rahmenverträge / Lieferpläne (Laufzeit, Restmenge, Abruflogik)", "ok",
+    ("luecke", "Aufteilung nach Bestandsarten (frei / Q-Prüfung / gesperrt)",
+     "Datenlücke: SAP liefert nur den Materialstatus, keine mengenmäßige Aufteilung."),
+    ("ok", "Rahmenverträge / Lieferpläne (Laufzeit, Restmenge, Abruflogik)",
      "In SAP vorhanden; im Dashboard (noch) nicht dargestellt."),
-    ("Offene Bestellungen / bestätigte Liefertermine", "partial",
+    ("teilweise", "Offene Bestellungen / bestätigte Liefertermine",
      "Quelle vorhanden, Integration offen (Baustein B)."),
-    ("Reale Zugänge (wann, welche Menge)", "gap",
+    ("luecke", "Reale Zugänge (wann, welche Menge)",
      "Derzeit nicht möglich (nur bestätigter Liefertermin abbildbar)."),
-    ("Verbrauch 36 Monate + Trends/Sondereffekte", "ok",
+    ("ok", "Verbrauch 36 Monate + Trends/Sondereffekte",
      "MVER-Historie + Trend-Einstufung (Phase 3)."),
-    ("Reichweite auf Basis Ø-Verbrauch 12 Monate", "ok",
+    ("ok", "Reichweite auf Basis Ø-Verbrauch 12 Monate",
      "Phase 2, Spalte Reichweite (Monate)."),
-    ("Reichweite mit frei editierbarem Planungsfeld", "ok",
+    ("ok", "Reichweite mit frei editierbarem Planungsfeld",
      "Verbrauchs-Override je Material im Report."),
-    ("Reichweite Stock-only / Stock + bestätigte Zugänge", "partial",
+    ("teilweise", "Reichweite Stock-only / Stock + bestätigte Zugänge",
      "Stock-only umgesetzt; Stock + Zugänge offen (Baustein B)."),
-    ("Wiederbeschaffungszeit als Dispo-/Risikobasis", "ok",
+    ("ok", "Wiederbeschaffungszeit als Dispo-/Risikobasis",
      "Phase 4; jetzt zusätzlich in der Reichweite-vs-WBZ-Matrix."),
-    ("Nachbestellungen seit Listenbeginn 2024", "gap",
+    ("luecke", "Nachbestellungen seit Listenbeginn 2024",
      "SAP-Quelle für Nachbestellhistorie noch zu klären."),
-    ("Bestandsentwicklung der letzten 2–3 Jahre", "ok",
+    ("ok", "Bestandsentwicklung der letzten 2–3 Jahre",
      "Aus ZMLAG-Stichtagen abgeleitet."),
 ]
 
-_REQ_BADGE = {
-    "ok": ("✓", "#16A34A", "abgedeckt"),
-    "partial": ("⚠", "#D97706", "teilweise"),
-    "gap": ("✗", "#DC2626", "Datenlücke"),
+_REQ_STATUS_STYLE = {
+    "ok": ("#16A34A", "✓ abgedeckt"),
+    "teilweise": ("#D97706", "⚠ teilweise"),
+    "luecke": ("#DC2626", "✗ Datenlücke"),
 }
 
 
-def _build_requirements_html() -> str:
-    n_ok = sum(1 for _t, s, _d in _REQUIREMENTS if s == "ok")
-    n_partial = sum(1 for _t, s, _d in _REQUIREMENTS if s == "partial")
-    n_gap = sum(1 for _t, s, _d in _REQUIREMENTS if s == "gap")
-
-    rows = []
-    for term, status, detail in _REQUIREMENTS:
-        symbol, color, word = _REQ_BADGE[status]
-        rows.append(
-            f"<tr><td><span class='req-badge' style='background:{color}1A;"
-            f"color:{color};border:1px solid {color}55;'>{symbol} {word}</span></td>"
-            f"<td>{_html.escape(term)}</td>"
-            f"<td class='req-detail'>{_html.escape(detail)}</td></tr>"
+def _build_glossary_html() -> str:
+    """Baut den globalen, klappbaren Glossar-Abschnitt (EINMAL, nicht je
+    Panel) - siehe _GLOSSARY_ITEMS."""
+    items = []
+    for term, definition in _GLOSSARY_ITEMS:
+        items.append(
+            f"<div class='glossary-item'>"
+            f"<div class='glossary-term'>{_html.escape(term)}</div>"
+            f"<div class='glossary-def'>{_html.escape(definition)}</div>"
+            f"</div>"
         )
-
-    summary = (
-        f"<span class='req-summary'>"
-        f"<b style='color:#16A34A'>{n_ok}</b> abgedeckt · "
-        f"<b style='color:#D97706'>{n_partial}</b> teilweise · "
-        f"<b style='color:#DC2626'>{n_gap}</b> Datenlücken</span>"
-    )
-
     return (
         "<details class='global-section'>"
-        "<summary>Anforderungsabdeckung (initiale Anforderungsliste) "
-        f"{summary}</summary>"
-        "<div class='table-wrap'><table class='req-table'><thead><tr>"
-        "<th>Status</th><th>Anforderung</th><th>Anmerkung</th>"
-        "</tr></thead><tbody>"
-        f"{''.join(rows)}</tbody></table></div>"
+        "<summary>Kennzahlen erklärt (ROI, WIP, Working Capital …)</summary>"
+        f"<div class='glossary-grid'>{''.join(items)}</div>"
         "</details>"
     )
 
 
-_PAGE_CSS = f"""
-:root {{
-  --accent: {ACCENT_COLOR};
-  --accent-dark: {ACCENT_COLOR_DARK};
-  --bg: {BG_COLOR};
-  --card-bg: {CARD_BG};
-  --text: {TEXT_COLOR};
-  --muted: {MUTED_TEXT_COLOR};
-  --border: {BORDER_COLOR};
-  --mx-diag: {MATRIX_DIAGONAL_BG};
-  --mx-over: {MATRIX_OVER_BG};
-  --mx-under: {MATRIX_UNDER_BG};
-  --mx-over-text: {MATRIX_OVER_TEXT};
-  --mx-under-text: {MATRIX_UNDER_TEXT};
-}}
-* {{ box-sizing: border-box; }}
-body {{
+def _build_requirement_coverage_html() -> str:
+    """Baut den globalen, klappbaren Abschnitt 'Anforderungsabdeckung'
+    (EINMAL, nicht je Panel) - siehe _REQUIREMENT_COVERAGE."""
+    n_ok = sum(1 for status, *_ in _REQUIREMENT_COVERAGE if status == "ok")
+    n_teilweise = sum(1 for status, *_ in _REQUIREMENT_COVERAGE if status == "teilweise")
+    n_luecke = sum(1 for status, *_ in _REQUIREMENT_COVERAGE if status == "luecke")
+
+    rows = []
+    for status, requirement, detail in _REQUIREMENT_COVERAGE:
+        color, badge_label = _REQ_STATUS_STYLE[status]
+        rows.append(
+            f"<tr><td><span class='req-badge' style='background:{color}1A;"
+            f"color:{color};border:1px solid {color}55;'>{badge_label}</span></td>"
+            f"<td>{_html.escape(requirement)}</td>"
+            f"<td class='req-detail'>{_html.escape(detail)}</td></tr>"
+        )
+
+    summary_span = (
+        "<span class='req-summary'>"
+        f"<b style='color:#16A34A'>{n_ok}</b> abgedeckt · "
+        f"<b style='color:#D97706'>{n_teilweise}</b> teilweise · "
+        f"<b style='color:#DC2626'>{n_luecke}</b> Datenlücken</span>"
+    )
+
+    return (
+        "<details class='global-section'>"
+        f"<summary>Anforderungsabdeckung (initiale Anforderungsliste) {summary_span}</summary>"
+        "<div class='table-wrap'><table class='req-table'>"
+        "<thead><tr><th>Status</th><th>Anforderung</th><th>Anmerkung</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+        "</details>"
+    )
+
+
+def _build_panel_html(
+    label: str,
+    panel_id: str,
+    summary_df: pd.DataFrame,
+    bestandswert_referenz_df: pd.DataFrame | None,
+    is_first: bool,
+) -> tuple[str, bool]:
+    """Baut EIN vollstaendiges Technologie-Panel (KPI-Kacheln + 4 Charts +
+    Matrix + Materialdetails-Tabelle)."""
+    display_style = "" if is_first else "display:none;"
+
+    if summary_df.empty:
+        return (
+            f"<section class='tech-panel' id='{panel_id}' style='{display_style}'>"
+            f"<div class='empty-hint'>Keine Daten für {_html.escape(label)}.</div>"
+            f"</section>",
+            False,
+        )
+
+    kpi_html = _build_kpi_html(summary_df)
+    figures = _build_figures(summary_df, bestandswert_referenz_df)
+    chart_cards = []
+    for i, (_title, fig) in enumerate(figures):
+        div_id = f"chart-{panel_id}-{i}"
+        fig_html = fig.to_html(
+            full_html=False, include_plotlyjs=False, div_id=div_id,
+            config={"displaylogo": False, "responsive": True},
+        )
+        chart_cards.append(f"<div class='chart-card'>{fig_html}</div>")
+
+    matrix_html = _build_matrix_html(panel_id)
+    table_html = _build_table_html(summary_df, panel_id)
+    table_section = (
+        f"<div class='table-card'><h2 class='table-title'>Materialdetails</h2>"
+        f"{table_html}</div>" if table_html else ""
+    )
+
+    panel = (
+        f"<section class='tech-panel' id='{panel_id}' style='{display_style}'>"
+        f"{kpi_html}"
+        f"<div class='chart-grid'>{''.join(chart_cards)}</div>"
+        f"{matrix_html}"
+        f"{table_section}"
+        f"</section>"
+    )
+    return panel, True
+
+
+_PAGE_CSS = """
+:root {
+  --accent: #2563EB;
+  --accent-dark: #1E3A8A;
+  --bg: #F1F4F8;
+  --card-bg: #FFFFFF;
+  --text: #1F2A33;
+  --muted: #6B7785;
+  --border: #E2E6EB;
+  --mx-diag: #FFF8E1;
+  --mx-over: #E8F5E9;
+  --mx-under: #FDECEA;
+  --mx-over-text: #1B7F3B;
+  --mx-under-text: #C0392B;
+}
+* { box-sizing: border-box; }
+body {
   font-family: 'Inter', Arial, Helvetica, sans-serif;
   margin: 0;
   background: var(--bg);
   color: var(--text);
-}}
-header.topbar {{
+}
+header.topbar {
   background: var(--card-bg);
   border-bottom: 1px solid var(--border);
   padding: 16px 32px;
@@ -891,161 +734,153 @@ header.topbar {{
   position: sticky;
   top: 0;
   z-index: 20;
-}}
-header.topbar h1 {{ font-size: 19px; margin: 0; font-weight: 600; }}
-.tech-select-wrap label {{
+}
+header.topbar h1 { font-size: 19px; margin: 0; font-weight: 600; }
+.tech-select-wrap label {
   font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px;
-}}
-select#tech-select {{
+}
+select#tech-select {
   font-size: 14px; padding: 8px 12px; border-radius: 6px;
   border: 1px solid var(--border); background: var(--card-bg);
   color: var(--text); min-width: 240px;
-}}
-main {{ padding: 24px 32px 48px; }}
-.info {{ color: var(--muted); font-size: 11px; cursor: help; }}
+}
+main { padding: 24px 32px 48px; }
+.info { color: var(--muted); font-size: 11px; cursor: help; }
 
 /* Globale Klappabschnitte */
-.global-section {{
+.global-section {
   background: var(--card-bg); border: 1px solid var(--border);
   border-radius: 8px; padding: 4px 18px; margin-bottom: 16px;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-}}
-.global-section > summary {{
+}
+.global-section > summary {
   cursor: pointer; font-weight: 600; font-size: 14px; padding: 12px 0;
   list-style: none; display: flex; align-items: center; gap: 10px;
-}}
-.global-section > summary::-webkit-details-marker {{ display: none; }}
-.global-section > summary::before {{ content: '▸'; color: var(--muted); }}
-.global-section[open] > summary::before {{ content: '▾'; }}
-.req-summary {{ font-weight: 400; font-size: 12px; color: var(--muted); margin-left: auto; }}
-.glossary-grid {{
+}
+.global-section > summary::-webkit-details-marker { display: none; }
+.global-section > summary::before { content: '▸'; color: var(--muted); }
+.global-section[open] > summary::before { content: '▾'; }
+.req-summary { font-weight: 400; font-size: 12px; color: var(--muted); margin-left: auto; }
+.glossary-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 14px; padding: 8px 0 18px;
-}}
-.glossary-term {{ font-weight: 600; font-size: 13px; margin-bottom: 3px; }}
-.glossary-def {{ font-size: 12.5px; color: var(--muted); line-height: 1.45; }}
-.req-table td, .req-table th {{ font-size: 12.5px; }}
-.req-badge {{
+}
+.glossary-term { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+.glossary-def { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.req-table td, .req-table th { font-size: 12.5px; }
+.req-badge {
   display: inline-block; padding: 2px 8px; border-radius: 10px;
   font-size: 11px; font-weight: 600; white-space: nowrap;
-}}
-.req-detail {{ color: var(--muted); }}
+}
+.req-detail { color: var(--muted); }
 
 /* KPI-Kacheln */
-.kpi-row {{
+.kpi-row {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
   gap: 16px; margin-bottom: 24px;
-}}
-.kpi-tile {{
+}
+.kpi-tile {
   background: var(--card-bg); border: 1px solid var(--border);
   border-radius: 8px; padding: 18px 20px; display: flex;
   align-items: center; gap: 14px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-}}
-.kpi-icon {{ width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0; }}
-.kpi-value {{ font-size: 22px; font-weight: 700; line-height: 1.1; }}
-.kpi-label {{ font-size: 12px; color: var(--muted); margin-top: 2px; }}
+}
+.kpi-icon { width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0; }
+.kpi-value { font-size: 22px; font-weight: 700; line-height: 1.1; }
+.kpi-label { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
 /* Charts */
-.chart-grid {{
+.chart-grid {
   display: grid; grid-template-columns: repeat(2, minmax(360px, 1fr));
   gap: 16px; margin-bottom: 16px;
-}}
-.chart-card, .table-card {{
+}
+.chart-card, .table-card {
   background: var(--card-bg); border: 1px solid var(--border);
   border-radius: 8px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-}}
-.chart-card {{ padding: 8px; }}
-.table-card {{ padding: 20px 24px; margin-bottom: 16px; }}
-.table-title {{ font-size: 15px; margin: 0 0 14px; font-weight: 600; }}
+}
+.chart-card { padding: 8px; }
+.table-card { padding: 20px 24px; margin-bottom: 16px; }
+.table-title { font-size: 15px; margin: 0 0 14px; font-weight: 600; }
 
 /* Tabellen allgemein */
-.table-wrap {{ overflow-x: auto; }}
-table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
-thead th {{
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th {
   text-align: left; color: var(--muted); font-weight: 600; font-size: 11px;
   text-transform: uppercase; letter-spacing: 0.03em;
   border-bottom: 1px solid var(--border); padding: 10px 12px; white-space: nowrap;
-}}
-#table-thead th, table[id^='table-'] thead th {{ cursor: pointer; user-select: none; }}
-.sort-ind {{ font-size: 9px; color: var(--accent); margin-left: 4px; }}
-tbody td {{ padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }}
-tbody tr:hover {{ background: var(--bg); }}
-.pill {{
+}
+#table-thead th, table[id^='table-'] thead th { cursor: pointer; user-select: none; }
+.sort-ind { font-size: 9px; color: var(--accent); margin-left: 4px; }
+tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+tbody tr:hover { background: var(--bg); }
+.pill {
   display: inline-block; padding: 3px 10px; border-radius: 12px;
   font-size: 12px; font-weight: 600;
-}}
-.table-note {{ font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.5; }}
-.legend-dot {{
+}
+.table-note { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+.legend-dot {
   display: inline-block; width: 11px; height: 11px; border-radius: 3px;
   border: 1px solid var(--border); vertical-align: middle; margin: 0 2px;
-}}
-.empty-hint {{ color: var(--muted); padding: 40px 0; text-align: center; }}
+}
+.empty-hint { color: var(--muted); padding: 40px 0; text-align: center; }
 
 /* Filter-Toolbar */
-.table-toolbar {{
+.table-toolbar {
   display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
   margin-bottom: 14px;
-}}
-.table-search {{
+}
+.table-search {
   flex: 1 1 240px; min-width: 200px; padding: 8px 12px; font-size: 13px;
   border: 1px solid var(--border); border-radius: 6px; background: var(--card-bg);
   color: var(--text);
-}}
-.filter-label {{
+}
+.filter-label {
   display: flex; flex-direction: column; font-size: 11px; color: var(--muted); gap: 4px;
-}}
-.filter-label select {{
+}
+.filter-label select {
   padding: 7px 10px; font-size: 13px; border: 1px solid var(--border);
   border-radius: 6px; background: var(--card-bg); color: var(--text); min-width: 120px;
-}}
-.table-count {{ font-size: 12px; color: var(--muted); align-self: center; margin-left: auto; }}
+}
+.table-count { font-size: 12px; color: var(--muted); align-self: center; margin-left: auto; }
 
 /* Matrix */
-.matrix-controls {{ display: flex; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }}
-.matrix-wrap {{ overflow-x: auto; }}
-table.matrix {{ border-collapse: collapse; font-size: 12px; min-width: 720px; }}
-table.matrix th, table.matrix td {{
+.matrix-controls { display: flex; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+.matrix-wrap { overflow-x: auto; }
+table.matrix { border-collapse: collapse; font-size: 12px; min-width: 720px; }
+table.matrix th, table.matrix td {
   border: 1px solid var(--border); padding: 7px 9px; text-align: right; white-space: nowrap;
-}}
-table.matrix thead th {{
+}
+table.matrix thead th {
   text-transform: none; letter-spacing: 0; font-size: 11px; text-align: center;
   background: var(--bg); color: var(--text);
-}}
-table.matrix th.row-head {{ text-align: left; background: var(--bg); font-weight: 600; }}
-table.matrix td.mx-diag {{ background: var(--mx-diag); font-weight: 600; }}
-table.matrix td.mx-over {{ background: var(--mx-over); color: var(--mx-over-text); }}
-table.matrix td.mx-under {{ background: var(--mx-under); color: var(--mx-under-text); }}
-table.matrix td.mx-zero {{ color: #C2C8CF; }}
-table.matrix .mx-total {{ font-weight: 600; background: #EEF2F7; }}
-table.matrix th.col-abbau {{ background: #16A34A; color: #fff; }}
-table.matrix th.col-aufbau {{ background: #DC2626; color: #fff; }}
-table.matrix td.col-abbau {{ color: var(--mx-over-text); font-weight: 600; }}
-table.matrix td.col-aufbau {{ color: var(--mx-under-text); font-weight: 600; }}
-.mx-gesamtpotential {{
+}
+table.matrix th.row-head { text-align: left; background: var(--bg); font-weight: 600; }
+table.matrix td.mx-diag { background: var(--mx-diag); font-weight: 600; }
+table.matrix td.mx-over { background: var(--mx-over); color: var(--mx-over-text); }
+table.matrix td.mx-under { background: var(--mx-under); color: var(--mx-under-text); }
+table.matrix td.mx-zero { color: #C2C8CF; }
+table.matrix .mx-total { font-weight: 600; background: #EEF2F7; }
+table.matrix th.col-abbau { background: #16A34A; color: #fff; }
+table.matrix th.col-aufbau { background: #DC2626; color: #fff; }
+table.matrix td.col-abbau { color: var(--mx-over-text); font-weight: 600; }
+table.matrix td.col-aufbau { color: var(--mx-under-text); font-weight: 600; }
+.mx-gesamtpotential {
   margin-top: 12px; font-size: 13px; display: flex; gap: 24px; flex-wrap: wrap;
-}}
-.mx-gesamtpotential b {{ font-size: 15px; }}
+}
+.mx-gesamtpotential b { font-size: 15px; }
 
-@media (max-width: 900px) {{
-  .chart-grid {{ grid-template-columns: 1fr; }}
-}}
+@media (max-width: 900px) {
+  .chart-grid { grid-template-columns: 1fr; }
+}
 """
 
-# Bucket-Grenzen/-Labels fuer die clientseitige Matrix (aus config, eine
-# Quelle der Wahrheit). Als JS-Globals injiziert.
-_MATRIX_CONFIG_JS = (
-    f"window.GMTS_BUCKET_EDGES={json.dumps(config.REICHWEITE_WBZ_BUCKET_EDGES)};"
-    f"window.GMTS_BUCKET_LABELS={json.dumps(config.REICHWEITE_WBZ_BUCKET_LABELS)};"
-)
-
-_PAGE_SCRIPT = """
+_APP_JS = r"""
 var GMTS_EUR = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 });
 
 function gmtsShowTechnology(panelId) {
   document.querySelectorAll('.tech-panel').forEach(function (panel) {
     panel.style.display = (panel.id === panelId) ? '' : 'none';
   });
-  // Matrix des nun sichtbaren Panels (neu) rendern, damit Layoutbreiten stimmen.
   gmtsRenderMatrix(panelId);
 }
 
@@ -1077,15 +912,14 @@ function gmtsRenderMatrix(panelId) {
   data.forEach(function (rec) {
     if (abc !== '__ALLE__' && rec.abc !== abc) return;
     if (xyz !== '__ALLE__' && rec.xyz !== xyz) return;
-    var rwIdx = gmtsBucketIndex(rec.rw);   // Spalte = Reichweite
-    var wbzIdx = gmtsBucketIndex(rec.wbz);  // Zeile = Wiederbeschaffungszeit
+    var rwIdx = gmtsBucketIndex(rec.rw);
+    var wbzIdx = gmtsBucketIndex(rec.wbz);
     if (rwIdx < 0 || wbzIdx < 0) return;
     grid[wbzIdx][rwIdx] += rec.val;
   });
 
-  // Aufbau (Tabelle)
   var html = '<table class="matrix"><thead><tr>';
-  html += '<th class="row-head">WBZ \\u2193 / RW \\u2192</th>';
+  html += '<th class="row-head">WBZ \u2193 / RW \u2192</th>';
   for (var c = 0; c < n; c++) { html += '<th>' + labels[c] + '</th>'; }
   html += '<th class="mx-total">Gesamt</th>';
   html += '<th class="col-abbau">Pot. Abbau</th>';
@@ -1102,32 +936,31 @@ function gmtsRenderMatrix(panelId) {
       rowTotal += val; colTotals[cc] += val;
       var cls;
       if (cc === rr) { cls = 'mx-diag'; }
-      else if (cc > rr) { cls = 'mx-over'; rowAbbau += val; }   // Reichweite > WBZ
-      else { cls = 'mx-under'; rowAufbau += val; }              // Reichweite < WBZ
+      else if (cc > rr) { cls = 'mx-over'; rowAbbau += val; }
+      else { cls = 'mx-under'; rowAufbau += val; }
       if (val === 0) { cls = 'mx-zero'; }
-      html += '<td class="' + cls + '">' + (val === 0 ? '\\u2013' : GMTS_EUR.format(val) + ' \\u20ac') + '</td>';
+      html += '<td class="' + cls + '">' + (val === 0 ? '\u2013' : GMTS_EUR.format(val) + ' \u20ac') + '</td>';
     }
     grandTotal += rowTotal; totalAbbau += rowAbbau; totalAufbau += rowAufbau;
-    html += '<td class="mx-total">' + GMTS_EUR.format(rowTotal) + ' \\u20ac</td>';
-    html += '<td class="col-abbau">' + (rowAbbau ? GMTS_EUR.format(rowAbbau) + ' \\u20ac' : '\\u2013') + '</td>';
-    html += '<td class="col-aufbau">' + (rowAufbau ? GMTS_EUR.format(rowAufbau) + ' \\u20ac' : '\\u2013') + '</td></tr>';
+    html += '<td class="mx-total">' + GMTS_EUR.format(rowTotal) + ' \u20ac</td>';
+    html += '<td class="col-abbau">' + (rowAbbau ? GMTS_EUR.format(rowAbbau) + ' \u20ac' : '\u2013') + '</td>';
+    html += '<td class="col-aufbau">' + (rowAufbau ? GMTS_EUR.format(rowAufbau) + ' \u20ac' : '\u2013') + '</td></tr>';
   }
 
-  // Summenzeile
   html += '<tr><th class="row-head mx-total">Gesamt</th>';
   for (var ct = 0; ct < n; ct++) {
-    html += '<td class="mx-total">' + GMTS_EUR.format(colTotals[ct]) + ' \\u20ac</td>';
+    html += '<td class="mx-total">' + GMTS_EUR.format(colTotals[ct]) + ' \u20ac</td>';
   }
-  html += '<td class="mx-total">' + GMTS_EUR.format(grandTotal) + ' \\u20ac</td>';
-  html += '<td class="col-abbau">' + GMTS_EUR.format(totalAbbau) + ' \\u20ac</td>';
-  html += '<td class="col-aufbau">' + GMTS_EUR.format(totalAufbau) + ' \\u20ac</td></tr>';
+  html += '<td class="mx-total">' + GMTS_EUR.format(grandTotal) + ' \u20ac</td>';
+  html += '<td class="col-abbau">' + GMTS_EUR.format(totalAbbau) + ' \u20ac</td>';
+  html += '<td class="col-aufbau">' + GMTS_EUR.format(totalAufbau) + ' \u20ac</td></tr>';
   html += '</tbody></table>';
 
   var netto = totalAbbau - totalAufbau;
   html += '<div class="mx-gesamtpotential">';
-  html += '<span>Gesamtpotential Abbau: <b style="color:' + getComputedStyle(document.documentElement).getPropertyValue('--mx-over-text') + '">' + GMTS_EUR.format(totalAbbau) + ' \\u20ac</b></span>';
-  html += '<span>Gesamtpotential Aufbau: <b style="color:' + getComputedStyle(document.documentElement).getPropertyValue('--mx-under-text') + '">' + GMTS_EUR.format(totalAufbau) + ' \\u20ac</b></span>';
-  html += '<span>Netto-Gesamtpotential: <b>' + GMTS_EUR.format(netto) + ' \\u20ac</b></span>';
+  html += '<span>Gesamtpotential Abbau: <b style="color:' + getComputedStyle(document.documentElement).getPropertyValue('--mx-over-text') + '">' + GMTS_EUR.format(totalAbbau) + ' \u20ac</b></span>';
+  html += '<span>Gesamtpotential Aufbau: <b style="color:' + getComputedStyle(document.documentElement).getPropertyValue('--mx-under-text') + '">' + GMTS_EUR.format(totalAufbau) + ' \u20ac</b></span>';
+  html += '<span>Netto-Gesamtpotential: <b>' + GMTS_EUR.format(netto) + ' \u20ac</b></span>';
   html += '</div>';
 
   container.innerHTML = html;
@@ -1191,11 +1024,10 @@ function gmtsSortTable(tableId, colIndex, type, thEl) {
   });
   thEl.setAttribute('data-asc', asc ? 'true' : 'false');
   var indicator = thEl.querySelector('.sort-ind');
-  if (indicator) indicator.textContent = asc ? '\\u25B2' : '\\u25BC';
+  if (indicator) indicator.textContent = asc ? '\u25B2' : '\u25BC';
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-  // Alle Matrizen initial rendern und Tabellenzaehler setzen.
   Object.keys(window.GMTS_MATRIX || {}).forEach(function (pid) {
     gmtsRenderMatrix(pid);
   });
@@ -1213,22 +1045,26 @@ def write_combined_dashboard(
     page_title: str = "GMTS Dashboard",
     all_technologies_label: str = "Alle Technologien",
 ) -> None:
-    """Schreibt EINE interaktive HTML-Datei mit Technologie-Dropdown,
-    globalen Klappabschnitten (Glossar + Anforderungsabdeckung) und je
-    Technologie einem vorberechneten Panel (KPI-Kacheln + 4 Charts +
-    Reichweite-vs-WBZ-Matrix + filter-/sortierbare Detailtabelle).
+    """Schreibt EINE interaktive HTML-Datei mit einem Technologie-Dropdown
+    oben, das zwischen vorberechneten Panels (KPI-Kacheln + 4 Charts +
+    Matrix + Detail-Tabelle je Technologie) umschaltet.
+
+    Globale, technologieunabhaengige Abschnitte (Glossar,
+    Anforderungsabdeckung) werden EINMAL oberhalb aller Panels gerendert.
 
     Args:
-        summary_by_label: Dict {Anzeigename: summary_df}. Reihenfolge der
-            Keys = Dropdown-Reihenfolge; das erste Element ist initial
-            sichtbar.
-        output_path: Zielpfad (siehe config.CONSOLIDATED_DASHBOARD_HTML_PATH).
-        page_title: Seitentitel/Ueberschrift.
-        all_technologies_label: Anzeigename des zusammengefuehrten Eintrags
-            (bekommt keinen Bestandswert-Vergleichsbalken, siehe unten).
+        summary_by_label: Dict {Anzeigename: summary_df}, EINE Zeile pro
+            Technologie. Reihenfolge der Dict-Keys bestimmt die Dropdown-
+            Reihenfolge; das erste Element ist beim Oeffnen sichtbar.
+        output_path: Zielpfad fuer die HTML-Datei.
+        page_title: Seitentitel/Ueberschrift in der Kopfzeile.
+        all_technologies_label: Anzeigename fuer den zusammengefuehrten
+            'Alle Technologien'-Eintrag, falls in summary_by_label
+            vorhanden.
 
-    Tut nichts (Konsolen-Hinweis), falls summary_by_label leer ist oder ALLE
-    enthaltenen summary_df leer sind.
+    Erstellt das Zielverzeichnis, falls es noch nicht existiert. Tut
+    nichts (gibt nur einen Konsolen-Hinweis aus), falls summary_by_label
+    leer ist oder ALLE enthaltenen summary_df leer sind.
     """
     output_path = Path(output_path)
 
@@ -1244,8 +1080,6 @@ def write_combined_dashboard(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Bestandswert-Vergleichsbasis (alle Einzeltechnologien) fuer den
-    # Vergleichsbalken im Einzel-Panel.
     per_technology_dfs = [
         df for label, df in summary_by_label.items()
         if label != all_technologies_label and not df.empty and "Technologie" in df.columns
@@ -1262,6 +1096,8 @@ def write_combined_dashboard(
 
     options_html = []
     panels_html = []
+    matrix_data_by_panel: dict[str, list[dict]] = {}
+
     for i, (label, summary_df) in enumerate(summary_by_label.items()):
         panel_id = f"panel-{i}"
         is_first = (i == 0)
@@ -1269,18 +1105,35 @@ def write_combined_dashboard(
             f"<option value='{panel_id}'>{_html.escape(label)}</option>"
         )
         referenz = None if label == all_technologies_label else bestandswert_referenz_df
-        panel_html, _has_content = _build_panel_html(
+        panel_html, has_content = _build_panel_html(
             label, panel_id, summary_df, referenz, is_first
         )
         panels_html.append(panel_html)
+        if has_content:
+            matrix_data_by_panel[panel_id] = _build_matrix_payload(summary_df)
 
-    global_sections = _build_glossary_html() + _build_requirements_html()
+    # Plotly.js wird EINMAL global eingebunden (jeder Chart-Aufruf nutzt
+    # include_plotlyjs=False) - eingebettet statt CDN, damit die Datei
+    # OHNE Internetverbindung funktioniert.
+    import plotly.offline as pyo
+    plotly_js = pyo.get_plotlyjs()
+
+    matrix_data_json = json.dumps(matrix_data_by_panel, ensure_ascii=False)
+    bucket_edges_json = json.dumps(config.REICHWEITE_WBZ_BUCKET_EDGES)
+    bucket_labels_json = json.dumps(config.REICHWEITE_WBZ_BUCKET_LABELS, ensure_ascii=False)
+
+    data_script = (
+        f"window.GMTS_BUCKET_EDGES={bucket_edges_json};"
+        f"window.GMTS_BUCKET_LABELS={bucket_labels_json};"
+        f"window.GMTS_MATRIX={matrix_data_json};"
+    )
 
     html_doc = (
         "<!DOCTYPE html><html lang='de'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
         f"<title>{_html.escape(page_title)}</title>"
         f"<style>{_PAGE_CSS}</style>"
+        f"<script>{plotly_js}</script>"
         "</head><body>"
         "<header class='topbar'>"
         f"<h1>{_html.escape(page_title)}</h1>"
@@ -1290,9 +1143,13 @@ def write_combined_dashboard(
         f"{''.join(options_html)}"
         "</select></div>"
         "</header>"
-        f"<main>{global_sections}{''.join(panels_html)}</main>"
-        f"<script>{_MATRIX_CONFIG_JS}</script>"
-        f"<script>{_PAGE_SCRIPT}</script>"
+        "<main>"
+        f"{_build_glossary_html()}"
+        f"{_build_requirement_coverage_html()}"
+        f"{''.join(panels_html)}"
+        "</main>"
+        f"<script>{data_script}</script>"
+        f"<script>{_APP_JS}</script>"
         "</body></html>"
     )
 

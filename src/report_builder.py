@@ -257,7 +257,6 @@ EXECUTIVE_SUMMARY_COLUMNS = [
     "Bestandswert_EUR",
     "Bestandsmenge_Stueck",
     "Reichweite_Monate",
-    "Wiederbeschaffungszeit_Monate",
     "MatStatus_Bezeichnung",
     "Trend_Einstufung",
     "Meldebestand_ROP",
@@ -271,7 +270,6 @@ EXECUTIVE_SUMMARY_COLUMNS = [
 EXECUTIVE_SUMMARY_DECIMAL_COLUMNS = [
     "Bestandsmenge_Stueck",
     "Reichweite_Monate",
-    "Wiederbeschaffungszeit_Monate",
     "Meldebestand_ROP",
     "Delta_Meldebestand",
 ]

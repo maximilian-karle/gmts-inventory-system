@@ -160,13 +160,12 @@ def build_executive_summary(
             Working_Capital_Reduktion und ROI_Prozent. Siehe Projektstatus.md
             Abschnitt 4i fuer die Designklaerung.
         lead_time_df: optionales Ergebnis von dispo_abcxyz_loader.
-            build_lead_time_table() (Phase 4), bereits auf die Materialien
-            dieser Technologie gefiltert - liefert Wiederbeschaffungszeit_Tage
-            (und daraus abgeleitet Wiederbeschaffungszeit_Monate). Ab
-            30.06.2026 ergaenzt, damit die Reichweite-vs-Wiederbeschaffung-
-            Matrix im HTML-Dashboard (html_dashboard.py) beide Achsen aus
-            EINER Tabelle bedienen kann und die Wiederbeschaffungszeit
-            zusaetzlich im COO-Excel-Reiter Executive_Summary sichtbar wird.
+            build_lead_time_table() (Phase 4) - liefert
+            Wiederbeschaffungszeit_Monate (aus Wiederbeschaffungszeit_Tage
+            / config.DAYS_PER_MONTH), Voraussetzung fuer die Reichweite-
+            vs-WBZ-Matrix im HTML-Dashboard (Abschnitt 4k Projektstatus.md,
+            30.06.2026). Rueckwaertskompatibel: ohne lead_time_df fehlt die
+            Spalte einfach (NaN ueberall via LEFT JOIN), kein Fehler.
 
     Returns:
         DataFrame mit einer Zeile pro Material, Spalten:
@@ -184,10 +183,6 @@ def build_executive_summary(
               falls vorhanden, sonst NaN)
             - Working_Capital_Reduktion, ROI_Prozent (aus working_capital_df,
               falls vorhanden, sonst NaN; siehe working_capital.py)
-            - Wiederbeschaffungszeit_Tage, Wiederbeschaffungszeit_Monate (aus
-              lead_time_df, falls vorhanden, sonst NaN; Monate = Tage /
-              config.DAYS_PER_MONTH - dieselbe Naeherung wie in den uebrigen
-              Phasen, siehe config.DAYS_PER_MONTH)
             - Prioritaet (siehe _classify_priority(), regelbasiert)
 
     Raises:
@@ -263,18 +258,13 @@ def build_executive_summary(
         )
 
     if lead_time_df is not None and "Wiederbeschaffungszeit_Tage" in lead_time_df.columns:
-        result = result.merge(
-            lead_time_df[["Material", "Wiederbeschaffungszeit_Tage"]],
-            on="Material", how="left",
+        lead_time_slim = lead_time_df[["Material", "Wiederbeschaffungszeit_Tage"]].copy()
+        lead_time_slim["Wiederbeschaffungszeit_Monate"] = (
+            lead_time_slim["Wiederbeschaffungszeit_Tage"] / config.DAYS_PER_MONTH
         )
-        # Wiederbeschaffungszeit in Monate umrechnen, damit sie mit
-        # Reichweite_Monate auf derselben Achse verglichen werden kann (Matrix
-        # im HTML-Dashboard). Bewusst dieselbe einfache DAYS_PER_MONTH-
-        # Naeherung wie in Phase 3/Baustein A (siehe config.py-Kommentar) -
-        # keine kalendergenaue Umrechnung, die im SAP-naeherungsweisen
-        # Ausgangswert ohnehin nicht hinterlegt ist.
-        result["Wiederbeschaffungszeit_Monate"] = (
-            result["Wiederbeschaffungszeit_Tage"] / config.DAYS_PER_MONTH
+        result = result.merge(
+            lead_time_slim[["Material", "Wiederbeschaffungszeit_Monate"]],
+            on="Material", how="left",
         )
 
     result["Prioritaet"] = result.apply(_classify_priority, axis=1)

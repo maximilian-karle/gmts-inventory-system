@@ -165,20 +165,16 @@ DAYS_PER_MONTH = 30.0
 
 
 # ---------------------------------------------------------------------------
-# Buckets fuer die Reichweite-vs-Wiederbeschaffung-Matrix (HTML-Dashboard,
-# ab 30.06.2026, siehe html_dashboard.py)
+# Reichweite-vs-Wiederbeschaffung-Matrix (HTML-Dashboard, 30.06.2026)
 # ---------------------------------------------------------------------------
-# Monats-Klassen fuer beide Achsen der Matrix (Reichweite je Spalte,
-# Wiederbeschaffungszeit je Zeile) - 1:1 uebernommen aus Max' Referenz-
-# Pivot (Screenshot 30.06.2026): [0-3], [3-6], [6-9], [9-15], [15-20],
-# [20-30], [30-999] Monate. Zentral hier definiert (sichtbare Annahme, kein
-# stiller Default), damit sich die Klassengrenzen an EINER Stelle aendern
-# lassen, ohne html_dashboard.py anzufassen.
-#
-# REICHWEITE_WBZ_BUCKET_EDGES sind die INNEREN Grenzen (untere Grenze 0 und
-# obere Grenze unendlich sind implizit). Ein Wert v faellt in Bucket i, wenn
-# EDGES[i-1] <= v < EDGES[i] (mit EDGES[-1]=0, EDGES[len]=inf). Die Labels
-# beschreiben die resultierenden Klassen fuer die Anzeige.
+# Bucket-Grenzen (Monate) fuer die Kreuztabelle Wiederbeschaffungszeit
+# (Zeilen) x Reichweite (Spalten) im HTML-Dashboard (siehe html_dashboard.py,
+# Kachel "Reichweite-vs-Wiederbeschaffung-Matrix"). Zentral hier gepflegt,
+# da sowohl der Python-Payload-Aufbau als auch die JS-seitige Einordnung
+# (window.GMTS_BUCKET_EDGES) dieselben Grenzen brauchen. EDGES sind die
+# oberen Trennwerte zwischen den Buckets (< edges[i] -> Bucket i, sonst der
+# letzte, offene Bucket); LABELS eine Zeile laenger als EDGES (letzter
+# Bucket ist nach oben offen).
 REICHWEITE_WBZ_BUCKET_EDGES = [3, 6, 9, 15, 20, 30]
 REICHWEITE_WBZ_BUCKET_LABELS = [
     "[0-3]", "[3-6]", "[6-9]", "[9-15]", "[15-20]", "[20-30]", "[30-999]",
@@ -314,6 +310,48 @@ def resolve_slug_for_label(label: str) -> str:
     slugifiziert (siehe slugify()) - sie werden NICHT verworfen.
     """
     return _LABEL_TO_SLUG.get(label, slugify(label))
+
+
+def require_columns(
+    df: pd.DataFrame,
+    required_columns,
+    *,
+    caller: str,
+    arg_name: str,
+) -> None:
+    """Prueft, ob df alle required_columns enthaelt, sonst ValueError mit
+    einheitlicher Fehlermeldung.
+
+    Fasst das Validierungsmuster zusammen, das bisher in den
+    _merge_inputs()-Funktionen von safety_stock.py, simulation_analysis.py
+    und working_capital.py identisch wiederholt war (Modul-Konsolidierung,
+    01.07.2026, siehe Abschnitt 6 Projektstatus.md - "Merge-Pattern-
+    Helper"). Die eigentliche Merge-/Join-Logik sowie die fachlich je
+    Modul unterschiedlichen Konsolen-Warnungen bei herausfallenden
+    Materialien bleiben BEWUSST individuell in den jeweiligen Modulen
+    (zu unterschiedlich in Wortlaut/Kontext, um sinnvoll generalisiert zu
+    werden, ohne an Aussagekraft fuer die COO-Kommunikation zu verlieren -
+    siehe dortige Docstrings).
+
+    Args:
+        df: zu pruefendes DataFrame.
+        required_columns: Menge oder Liste der Pflichtspalten.
+        caller: Modul- und Funktionsname fuer die Fehlermeldung, z.B.
+            "safety_stock._merge_inputs()".
+        arg_name: Name des Parameters in der aufrufenden Funktion, z.B.
+            "coverage_df", fuer die Fehlermeldung.
+
+    Raises:
+        ValueError: falls eine oder mehrere Spalten fehlen. Meldungsformat
+            identisch zum bisherigen, individuellen Code in den drei
+            Modulen (keine Verhaltensaenderung).
+    """
+    missing = set(required_columns) - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"{caller} erwartet in {arg_name} die Spalten "
+            f"{sorted(required_columns)}, es fehlen: {sorted(missing)}."
+        )
 
 
 @dataclass(frozen=True)
