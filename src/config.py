@@ -119,6 +119,15 @@ SE16XXL_INVENTORY_EXPORT_PATH = INPUT_ROOT / SE16XXL_INVENTORY_EXPORT_FILENAME
 SE16XXL_DISPO_ABCXYZ_EXPORT_FILENAME = "se16xxl_dispo_abcxyz_export.xlsx"
 SE16XXL_DISPO_ABCXYZ_EXPORT_PATH = INPUT_ROOT / SE16XXL_DISPO_ABCXYZ_EXPORT_FILENAME
 
+# SE16XXL-Merge-Report "Open_Orders" (offene Bestellungen/Lieferplan-
+# einteilungen: C~-Block = Bestellkopf/-position, D~-Block = Einteilungszeile
+# mit Liefertermin und Mengenfeldern). Grundlage fuer Baustein B (Reichweite
+# "Stock + bestaetigte Zugaenge", bisher zurueckgestellt, siehe
+# Projektstatus.md Abschnitt 3/4c). Neu ab 01.07.2026, siehe
+# open_orders_loader.py.
+SE16XXL_OPEN_ORDERS_EXPORT_FILENAME = "se16xxl_open_orders_export.xlsx"
+SE16XXL_OPEN_ORDERS_EXPORT_PATH = INPUT_ROOT / SE16XXL_OPEN_ORDERS_EXPORT_FILENAME
+
 
 # ---------------------------------------------------------------------------
 # Service-Level-Matrix nach ABC/XYZ-Klasse (Phase 5, ab 29.06.2026)
