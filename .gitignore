@@ -18,12 +18,12 @@ Thumbs.db
 *.key
 
 # === SAP-Rohdaten & Reports: NICHT versionieren ===
-# Erfasst Dateien auf JEDER Ebene unterhalb von input_data/ bzw. output_data/
+# Erfasst Dateien auf JEDER Ebene unterhalb von data/input/ bzw. data/output/
 # (nicht nur eine Ebene tief wie zuvor) - inkl. ZMLAG/MVER/SE16XXL-Exporte,
-# die direkt unter input_data/ liegen (Gesamtexport-Modus), sowie
-# konsolidierte Reports/Dashboards direkt unter output_data/.
-input_data/
-output_data/
+# die direkt unter data/input/ liegen (Gesamtexport-Modus), sowie
+# konsolidierte Reports/Dashboards direkt unter data/output/.
+data/input/
+data/output/
 
 # Zur Sicherheit zusaetzlich global nach Dateityp, falls Exporte/Reports
 # versehentlich ausserhalb dieser Ordner abgelegt werden:
@@ -40,7 +40,7 @@ material_comments.xlsx
 
 # Generierte HTML-Dashboards enthalten Klartext-Bestandsdaten
 *_dashboard.html
-output_data/**/*.html
+data/output/**/*.html
 
 # === Referenzmaterialien: nicht oeffentlich verteilbar ===
 # Lehrbuchauszuege, internes Whitepaper, urspruengliche Anforderungsliste -

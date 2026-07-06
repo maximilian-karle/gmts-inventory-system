@@ -13,7 +13,7 @@ Zwei Input-Modi (siehe config.py / data_loader.py fuer den Hintergrund):
        config.KNOWN_TECHNOLOGIES gelistet sind, werden automatisch mit
        generiertem Slug mitverarbeitet statt verworfen.
     2. EINZELORDNER-MODUS (Fallback): liegt KEIN Gesamtexport vor, wird wie
-       bisher je Technologie ein eigener Input-Ordner input_data/<slug>/
+       bisher je Technologie ein eigener Input-Ordner data/input/<slug>/
        erwartet und einzeln gelesen.
 Beide Modi werden pro Lauf NICHT gemischt - entweder wird ausschliesslich
 der Gesamtexport verwendet, oder ausschliesslich die Einzelordner.
@@ -22,7 +22,7 @@ Ablauf je Technologie (in beiden Modi identisch):
     1. RunConfig fuer die Technologie ermitteln
     2. Bestandsentwicklung und Risikoeinstufung berechnen (stock_analysis.py)
     3. Einzel-Report erzeugen (report_builder.build_report), unter
-       output_data/<slug>/<slug>_bestandsreport.xlsx
+       data/output/<slug>/<slug>_bestandsreport.xlsx
 
 Phase 2 (Reichweite, ab 24.06.2026):
     Zusaetzlich zu ZMLAG wird, FALLS vorhanden, der MVER-Gesamtexport

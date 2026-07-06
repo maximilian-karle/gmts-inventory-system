@@ -38,16 +38,25 @@ im Python-Code per Join verbunden werden:
 | **SE16XXL "Dispo_ABCXYZ"** | Wiederbeschaffungszeit, Sicherheitsbestand, Meldebestand, Preise, Variationskoeffizient, kombiniertes ABCXYZ-Kennzeichen |
 
 Bevorzugt wird je Quelle ein einzelner Gesamtexport ueber alle Technologien
-(`input_data/<quelle>_export.xlsx`), intern anhand der SAP-Spalte `Technologie`
-aufgeteilt. Der aeltere Einzelordner-Ansatz (`input_data/<technologie_slug>/`)
+(`data/input/<quelle>_export.xlsx`), intern anhand der SAP-Spalte `Technologie`
+aufgeteilt. Der aeltere Einzelordner-Ansatz (`data/input/<technologie_slug>/`)
 bleibt als Fallback erhalten.
 
 ## Projektstruktur
 
 ```
 gmts/
-├── input_data/                   # SAP-Exporte (lokal, nicht versioniert)
-├── output_data/                  # generierte Excel-Reports & HTML-Dashboards (lokal, nicht versioniert)
+├── 00_Charter/
+│   └── Projektanforderungen.md   # Projektauftrag, Ziele, Stakeholder
+├── kpis/
+│   └── kpi_definitions.md        # Kennzahlen-/Schwellenwert-Definitionen (Referenz zu config.py)
+├── methodology/                  # methodische Referenzliteratur (nicht oeffentlich verteilbar)
+├── analysis/                     # Platzhalter fuer Ad-hoc-/Explorationsanalysen
+├── dashboards/                   # Platzhalter fuer Dashboard-Spezifikationen
+├── reports/                      # Platzhalter fuer finale, an Stakeholder verteilte Reports
+├── data/
+│   ├── input/                    # SAP-Exporte (lokal, nicht versioniert)
+│   └── output/                   # generierte Excel-Reports & HTML-Dashboards (lokal, nicht versioniert)
 ├── src/
 │   ├── config.py                  # zentrale Konfiguration (Pfade, Konstanten, Service-Level-Matrix)
 │   ├── data_loader.py             # ZMLAG-Einlesen & Validierung
@@ -69,6 +78,7 @@ gmts/
 ├── docs/
 │   └── Projektstatus.md           # laufend gepflegter Projektstatus (Methodik, Entscheidungen, Historie)
 ├── requirements.txt
+├── CLAUDE.md                      # projektweite Hinweise fuer Claude-Sessions
 └── README.md
 ```
 
@@ -86,16 +96,16 @@ Hinweis: In PowerShell ist `pip` haeufig nicht direkt im PATH registriert -
 
 ## Ablauf eines Analyse-Laufs
 
-1. SAP-Exporte in `input_data/` ablegen (siehe Datenquellen-Strategie oben).
+1. SAP-Exporte in `data/input/` ablegen (siehe Datenquellen-Strategie oben).
 2. Ausfuehren:
    ```powershell
    cd src
    python main.py
    ```
-3. Ergebnis je Technologie: `output_data/<technologie_slug>/<technologie_slug>_bestandsreport.xlsx`
+3. Ergebnis je Technologie: `data/output/<technologie_slug>/<technologie_slug>_bestandsreport.xlsx`
    sowie `<technologie_slug>_dashboard.html`.
-4. Konsolidierter Gesamt-Report: `output_data/alle_technologien_bestandsreport.xlsx`
-   sowie `output_data/alle_technologien_dashboard.html`.
+4. Konsolidierter Gesamt-Report: `data/output/alle_technologien_bestandsreport.xlsx`
+   sowie `data/output/alle_technologien_dashboard.html`.
 
 Fuer den Nachlauf einer einzelnen Technologie: `python main_single.py`.
 
@@ -116,5 +126,6 @@ Operations Management* (2019) und *Introduction to Supply Chain Analytics*
 (2021), sowie einem internen Whitepaper zu Forecast-Driven Inventory
 Optimization. Der Code in diesem Projekt ist ein vollstaendiger Neuaufbau und
 uebernimmt keine Logik aus frueheren Excel/Python-Prototypen - diese dienen
-ausschliesslich als methodische Referenz und sind bewusst nicht Teil dieses
-Repositories.
+ausschliesslich als methodische Referenz und liegen lokal unter `methodology/`
+(bewusst nicht versioniert, siehe `.gitignore` - kein Teil der Git-Historie
+dieses Repositories).

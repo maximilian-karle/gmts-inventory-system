@@ -397,7 +397,7 @@ def _validate_technology_assignment(
     gibt es keinen "erwarteten" Input-Ordner mehr und diese Pruefung
     entfaellt (siehe load_full_zmlag_export).
 
-    Fachlicher Hintergrund: Pro Input-Ordner (z.B. input_data/dcs_2_0/) wird
+    Fachlicher Hintergrund: Pro Input-Ordner (z.B. data/input/dcs_2_0/) wird
     grundsaetzlich genau ein ZMLAG-Export mit Materialien einer Technologie
     erwartet. Da die Technologie-Spalte materialgenau aus den SAP-Daten
     uebernommen wird, wuerde ein falsch abgelegter Export (z.B. DCS-1.0-Datei

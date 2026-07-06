@@ -23,7 +23,7 @@ Zwei Input-Modi (siehe main.py fuer die Auswahllogik):
        erhalten automatisch einen generierten Slug (siehe slugify()).
     2. EINZELORDNER-MODUS (Fallback, frueheres Verhalten): falls kein
        Gesamtexport vorliegt, wird weiterhin je Technologie ein eigener
-       Ordner input_data/<slug>/ mit einem technologie-spezifischen Export
+       Ordner data/input/<slug>/ mit einem technologie-spezifischen Export
        erwartet. Beide Modi werden pro Lauf NICHT gemischt (siehe main.py).
 """
 
@@ -78,8 +78,8 @@ _LABEL_TO_SLUG = {label: slug for slug, label in KNOWN_TECHNOLOGIES.items()}
 # Projekt-Basispfade
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-INPUT_ROOT = PROJECT_ROOT / "input_data"
-OUTPUT_ROOT = PROJECT_ROOT / "output_data"
+INPUT_ROOT = PROJECT_ROOT / "data" / "input"
+OUTPUT_ROOT = PROJECT_ROOT / "data" / "output"
 
 # Erwarteter Dateiname des Gesamtexports im Gesamtexport-Modus (siehe
 # Modul-Docstring). Liegt direkt unter INPUT_ROOT, da er nicht mehr einer
