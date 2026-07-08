@@ -3,7 +3,7 @@
 Integriertes Dispositions- und Fruehwarnsystem zur Bewertung von Lagerbestand,
 Versorgungsrisiko und Bestandsentwicklung auf Material-Nr.-Ebene. Vollstaendiger
 Neuaufbau in Python auf Basis von SAP-Exporten, mit konsolidierten Excel-Reports
-und interaktivem HTML-Dashboard fuer die COO-Kommunikation.
+und interaktivem HTML-Dashboard.
 
 ## Template-Charakter
 
